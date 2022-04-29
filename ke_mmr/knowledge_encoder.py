@@ -3,10 +3,10 @@ from transformers import BertTokenizer
 
 
 class KnowledgeEncoder:
-    def __init__(self):
-        self.max_knowledge = 5
+    def __init__(self, tokenizer, limit=5):
+        self.max_knowledge = limit
         self.limit = 1 + 2 * self.max_knowledge
-        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        self.tokenizer = tokenizer
 
     def crawl_concept_net(self, event):
         obj = requests.get('http://api.conceptnet.io/c/en/' + event).json()
