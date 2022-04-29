@@ -1,0 +1,18 @@
+data = [[[document_name, [emb_sen1], [emb_sen2], [event1_index], [event2_index], label]], ...]
+
+
+
+test_set = [[document_name, [emb_sen1], [emb_sen2], event1_index, event2_index, label], ...]
+
+## emb_sen1 == emb_sen2
+
+test_set_mask = [[document_name, [emb_sen1], [emb_sen2], event1_index, event2_index, label], ...]
+
+## emb_sen1 != emb_sen2; event1 masked in emb_sen1, event2 masked in emb_sen2
+
+
+
+test_dataset = Dataset(batch_size, test_set)
+
+
+
