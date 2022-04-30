@@ -56,8 +56,8 @@ class Dataset(object):
         max_sentence_len_s = max(sentence_len_s)
         max_sentence_len_t = max(sentence_len_t)
 
-        event1_lens = [len(tup[2]) for tup in batch]
-        event2_lens = [len(tup[3]) for tup in batch]
+        event1_lens = [len(tup[3]) for tup in batch]
+        event2_lens = [len(tup[4]) for tup in batch]
 
         sentences_s, sentences_t, event1, event2, data_y = list(), list(), list(), list(), list()
         for data in batch:

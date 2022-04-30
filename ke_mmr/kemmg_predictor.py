@@ -18,10 +18,12 @@ class KEMMGPredictor:
     def __init__(self, model_path, model_mask_path, device='cuda', knowledge_limit=5):
         self.model = BertCausalModel(3)
         self.model.load_state_dict(torch.load(model_path))
+        self.model.training = False
         self.model.to(device)
 
         self.model_mask = BertCausalModel(3)
         self.model_mask.load_state_dict(torch.load(model_mask_path))
+        self.model_mask.training = False
         self.model_mask.to(device)
 
         self.device = torch.device(device)
@@ -59,11 +61,13 @@ class KEMMGPredictor:
 
         with torch.no_grad():
             sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2, event2_mask, data_y, _ = single
-            sentences_s_mask = single_mask[0]
+            sentences_s_mask, mask_s_mask, sentences_t_mask, mask_t_mask, event1_mask, event1_mask_mask, event2_mask, event2_mask_mask, data_y_mask, _ = single_mask
 
             opt = self.model.forward_logits(sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2, event2_mask)
-            opt_mask = self.model_mask.forward_logits(sentences_s_mask, mask_s, sentences_t, mask_t, event1, event1_mask,
-                                                 event2, event2_mask)
+            #opt_mask = self.model_mask.forward_logits(sentences_s_mask, mask_s, sentences_t, mask_t, event1, event1_mask,
+             #                                    event2, event2_mask)
+            opt_mask = self.model_mask.forward_logits(sentences_s_mask, mask_s_mask, sentences_t_mask, mask_t_mask, event1_mask, event1_mask_mask, event2_mask, event2_mask_mask)
+
 
             opt_mix = torch.cat([opt, opt_mask], dim=-1)
             logits = self.model.additional_fc(opt_mix)
@@ -86,13 +90,16 @@ class KEMMGPredictor:
             predicted_all = []
             for batch, batch_mask in tqdm(dataset_mix, desc='Predicting'):
                 sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2, event2_mask, data_y, _ = batch
-                sentences_s_mask = batch_mask[0]
+                sentences_s_mask, mask_s_mask, sentences_t_mask, mask_t_mask, event1_mask, event1_mask_mask, event2_mask, event2_mask_mask, data_y_mask, _  = batch_mask
 
                 opt = self.model.forward_logits(sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2,
                                            event2_mask)
-                opt_mask = self.model_mask.forward_logits(sentences_s_mask, mask_s, sentences_t, mask_t, event1,
-                                                     event1_mask,
-                                                     event2, event2_mask)
+                #opt_mask = self.model_mask.forward_logits(sentences_s_mask, mask_s, sentences_t, mask_t, event1,
+                #                                     event1_mask,
+                #                                     event2, event2_mask)
+
+                opt_mask = self.model_mask.forward_logits(sentences_s_mask, mask_s_mask, sentences_t_mask, mask_t_mask,
+                                                          event1_mask, event1_mask_mask, event2_mask, event2_mask_mask)
 
                 opt_mix = torch.cat([opt, opt_mask], dim=-1)
                 logits = self.model.additional_fc(opt_mix)
