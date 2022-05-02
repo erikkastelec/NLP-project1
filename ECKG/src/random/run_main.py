@@ -3,6 +3,8 @@ import logging
 from time import sleep
 
 import progressbar
+from Spider_24ur import Spider_24ur
+from Spider_RTVSLO import Spider_RTVSLO
 from fuzzywuzzy import fuzz
 from scrapyscript import Processor, Job
 from simstring.database.dict import DictDatabase
@@ -10,8 +12,6 @@ from simstring.feature_extractor.character_ngram import CharacterNgramFeatureExt
 from simstring.measure.cosine import CosineMeasure
 from simstring.searcher import Searcher
 
-from Spider_24ur import Spider_24ur
-from Spider_RTVSLO import Spider_RTVSLO
 from helper_functions import num_files_in_dir, read_pickle, write_pickle, ner_extract_all, clean_all_ner
 
 

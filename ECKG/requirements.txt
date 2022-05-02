@@ -1,0 +1,14 @@
+lxml
+beautifulsoup4
+numpy
+scikit-learn
+torch
+neleval==3.1.1
+pyjarowinkler==1.8
+allennlp
+transformers
+pandas
+python-Levenshtein
+fuzzywuzzy
+simstring-pure
+progressbar2

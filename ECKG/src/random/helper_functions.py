@@ -86,8 +86,7 @@ def clean_all_ner(data):
     """
     Cleans data by removing duplicates across all the ner extraction
     Args:
-        data: list of NER extractions (Output of ner_extract_all)
-
+        data: output of Classla pipeline
     Returns:
         data: cleaned list of NER extractions
     """
@@ -162,9 +161,11 @@ def ner_extraction(text, classla_pipeline):
     ner_data = classla_pipeline(text)
     entities = {
         "per": [],
-        "org": []
+        "org": [],
+        "loc": []
     }
     # Add found entities to list
+    print(ner_data.entities)
     for i, entity in enumerate(ner_data.entities):
         # Skips entity types that we do not intend to keep
         try:
@@ -179,28 +180,28 @@ def ner_extraction(text, classla_pipeline):
         # Remove last space
         entities[entity.type.lower()][-1] = entities[entity.type.lower()][-1][:-1]
     # Clean data
-    for key, value in entities.items():
-        # Remove "-*" eg. SD-ja, SD-jev -> SD
-        for i, v in enumerate(value):
-            tmp = v.split('-')
-            if len(tmp) != 1:
-                entities[key][i] = tmp[0]
-            if key == "per" and "Minister" in v:
-                v = v[9:]
-
-        # Remove duplicates
-        entities[key] = fuzzywuzzy_custom_dedupe(value, threshold=70)
-        unwanted = []
-        if key == "per":
-            for i, v in enumerate(entities[key]):
-                # Remove if only first or last name
-                if not " " in v[0]:
-                    # Check if entity type was missed
-                    if v[0] in entities["org"]:
-                        for x in range(0, v[1]):
-                            entities["org"].append(v[0])
-                    unwanted.append(i)
-        entities[key] = remove_from_list(entities[key], unwanted)
+    # for key, value in entities.items():
+    #     # Remove "-*" eg. SD-ja, SD-jev -> SD
+    #     for i, v in enumerate(value):
+    #         tmp = v.split('-')
+    #         if len(tmp) != 1:
+    #             entities[key][i] = tmp[0]
+    #         if key == "per" and "Minister" in v:
+    #             v = v[9:]
+    #
+    #     # Remove duplicates
+    #     entities[key] = fuzzywuzzy_custom_dedupe(value, threshold=70)
+    #     unwanted = []
+    #     if key == "per":
+    #         for i, v in enumerate(entities[key]):
+    #             # Remove if only first or last name
+    #             if not " " in v[0]:
+    #                 # Check if entity type was missed
+    #                 if v[0] in entities["org"]:
+    #                     for x in range(0, v[1]):
+    #                         entities["org"].append(v[0])
+    #                 unwanted.append(i)
+    #     entities[key] = remove_from_list(entities[key], unwanted)
     # for key, value in entities.items():
     #     print("Values for ", key, ": ", value)
     return entities

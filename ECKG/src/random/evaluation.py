@@ -81,7 +81,7 @@ if __name__ == '__main__':
     ground_truth["correctDiv50"] = (ground_truth["goodRatingDiversityOur"] == ground_truth["diversity+AF8-50"]).astype(
         int)
     ground_truth["correctDiv75"] = (
-                ground_truth["goodRatingDiversityOur75"] == ground_truth["diversity+AF8-75"]).astype(int)
+            ground_truth["goodRatingDiversityOur75"] == ground_truth["diversity+AF8-75"]).astype(int)
     print("Accurate recommendation GR50: ", sum(ground_truth["correct50"]) / len(ground_truth["correct50"]))
     print("Accurate recommendation GR75: ", sum(ground_truth["correct75"]) / len(ground_truth["correct75"]))
     print("Accurate recommendation DR50: ", sum(ground_truth["correctDiv50"]) / len(ground_truth["correctDiv50"]))
