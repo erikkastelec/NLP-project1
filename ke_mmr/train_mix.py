@@ -324,8 +324,8 @@ if __name__ == '__main__':
     train_set, train_set_mask = [d[0] for d in train_pair], [d[1] for d in train_pair]
 
     ###
-    test_dataset = Dataset(7, test_set)
-    test_dataset_mask = Dataset(7, test_set_mask)
+    test_dataset = Dataset(2, test_set)
+    test_dataset_mask = Dataset(2, test_set_mask)
 
     test_dataset_batch = [batch for batch in test_dataset.reader(device, False)]
     test_dataset_mask_batch = [batch for batch in test_dataset_mask.reader(device, False)]
@@ -334,8 +334,8 @@ if __name__ == '__main__':
 
 
     ###
-    train_dataset = Dataset(7, train_set)
-    train_dataset_mask = Dataset(7, train_set_mask)
+    train_dataset = Dataset(1, train_set)
+    train_dataset_mask = Dataset(1, train_set_mask)
 
     train_dataset_batch = [batch for batch in train_dataset.reader(device, False)]
     train_dataset_mask_batch = [batch for batch in train_dataset_mask.reader(device, False)]
@@ -360,10 +360,12 @@ if __name__ == '__main__':
             model.train()
             model_mask.train()
             sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2, event2_mask, data_y, _ = batch
-            sentences_s_mask = batch_mask[0]
+            opt = model.forward_logits(sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2,
+                                            event2_mask)
 
-            opt = model.forward_logits(sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2, event2_mask)
-            opt_mask = model_mask.forward_logits(sentences_s_mask, mask_s, sentences_t, mask_t, event1, event1_mask, event2, event2_mask)
+            sentences_s_mask, mask_s_mask, sentences_t_mask, mask_t_mask, event1_mask, event1_mask_mask, event2_mask, event2_mask_mask, data_y_mask, _ = batch_mask
+            opt_mask = model_mask.forward_logits(sentences_s_mask, mask_s_mask, sentences_t_mask, mask_t_mask,
+                                                      event1_mask, event1_mask_mask, event2_mask, event2_mask_mask)
 
             opt_mix = torch.cat([opt, opt_mask], dim=-1)
             logits = model.additional_fc(opt_mix)
@@ -380,34 +382,34 @@ if __name__ == '__main__':
 
 
 
-        model.eval()
-        model_mask.eval()
+    model.eval()
+    model_mask.eval()
 
-        #torch.save(model, 'models/bert_causal_model_full.pt')
-        #torch.save(model_mask, 'models/bert_causal_model_mask_full.pt')
-        #torch.save(model.state_dict(), 'models/bert_causal_model.pt')
-        #torch.save(model_mask.state_dict(), 'models/bert_causal_model_mask.pt')
+    torch.save(model, 'models/bert_causal_model_full2.pt')
+    torch.save(model_mask, 'models/bert_causal_model_mask_full2.pt')
+    torch.save(model.state_dict(), 'models/bert_causal_model2.pt')
+    torch.save(model_mask.state_dict(), 'models/bert_causal_model_mask2.pt')
 
-        with torch.no_grad():
-            predicted_all = []
-            gold_all = []
-            for batch, batch_mask in test_dataset_mix:
-                sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2, event2_mask, data_y, _ = batch
-                sentences_s_mask = batch_mask[0]
+    with torch.no_grad():
+        predicted_all = []
+        gold_all = []
+        for batch, batch_mask in test_dataset_mix:
+            sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2, event2_mask, data_y, _ = batch
+            sentences_s_mask = batch_mask[0]
 
-                opt = model.forward_logits(sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2, event2_mask)
-                opt_mask = model_mask.forward_logits(sentences_s_mask, mask_s, sentences_t, mask_t, event1, event1_mask,
-                                                     event2, event2_mask)
+            opt = model.forward_logits(sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2, event2_mask)
+            opt_mask = model_mask.forward_logits(sentences_s_mask, mask_s, sentences_t, mask_t, event1, event1_mask,
+                                                 event2, event2_mask)
 
-                opt_mix = torch.cat([opt, opt_mask], dim=-1)
-                logits = model.additional_fc(opt_mix)
+            opt_mix = torch.cat([opt, opt_mask], dim=-1)
+            logits = model.additional_fc(opt_mix)
 
-                predicted = torch.argmax(logits, -1)
-                predicted = list(predicted.cpu().numpy())
-                predicted_all += predicted
+            predicted = torch.argmax(logits, -1)
+            predicted = list(predicted.cpu().numpy())
+            predicted_all += predicted
 
-                gold = list(data_y.cpu().numpy())
-                gold_all += gold
-            p, r, f = compute_f1(gold_all, predicted_all)
-            print(p, r, f)
-            print('Here')
+            gold = list(data_y.cpu().numpy())
+            gold_all += gold
+        p, r, f = compute_f1(gold_all, predicted_all)
+        print(p, r, f)
+        print('Here')
