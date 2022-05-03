@@ -1,15 +1,16 @@
+from ECKG.src.baseline import BaselineController, MentionPairFeatures
 from contextual_model_bert import ContextualControllerBERT
-from data import read_classla
+from data import read_classla, read_corpus
 from eventify import *
 from helper_functions import *
 
 # coreferece or events
-MODE = "events"
+MODE = "coreference"
 # sl or en
 LANGUAGE = "sl"
 
 if __name__ == '__main__':
-    if MODE == "coreferece":
+    if MODE == "coreference":
 
         model_name = "baseline_model_senticoref"
         learning_rate = 0.05
@@ -28,8 +29,22 @@ if __name__ == '__main__':
         # read corpus
         documents = read_corpus(dataset_name)
         # test on first document
-        print(model._train_doc(documents[0], eval_mode=True))
-
+        eval_doc = model._train_doc(documents[0], eval_mode=True)
+        # mapped_cluster_dict = {}
+        # for key, values in documents[0].mapped_clusters.items():
+        #     if values is None:
+        #         values = "None"
+        #     try:
+        #         mapped_cluster_dict["values"].append(key)
+        #     except Exception:
+        #         mapped_cluster_dict["values"] = key
+        for cluster in documents[0].clusters:
+            print([" ".join([y.raw_text for y in documents[0].mentions[x].tokens]) for x in cluster])
+        for key, values in eval_doc[0].items():
+            if key is None:
+                key = "None"
+            print(" ".join([y.raw_text for y in documents[0].mentions[key].tokens]), ":")
+            print([" ".join([y.raw_text for y in documents[0].mentions[x].tokens]) for x in values])
         # Evaluation for conll format produced by classla
         classla.download('sl')
         pipeline = classla.Pipeline("sl", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
@@ -60,7 +75,8 @@ if __name__ == '__main__':
         # Run named entity deduplication/resolution
         deduplication_mapper = deduplicate_named_entities(data)
         print(deduplication_mapper)
-
+        x = [" ".join([y.text for y in x.tokens]) for x in data.entities]
+        print(x)
         e = Eventify(language=LANGUAGE)
         # Extract SVO triplets / events
         events = e.eventify(text)
