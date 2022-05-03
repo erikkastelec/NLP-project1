@@ -7,9 +7,10 @@ from knowledge_encoder import KnowledgeEncoder
 import sys
 from tqdm import tqdm
 
-model_dir = 'bert-large-uncased' # uncased better
+model_dir = 'bert-large-uncased'  # uncased better
 tokenizer = BertTokenizer.from_pretrained(model_dir, do_lower_case=True)
 knowledge_encoder = KnowledgeEncoder(tokenizer, 5)
+
 
 def get_sem_eval(datasets, opt_file_name, mask=True):
     data_set = []
@@ -22,14 +23,15 @@ def get_sem_eval(datasets, opt_file_name, mask=True):
         if not mask:
             span1 = span1[0]
             span2 = span2[0]
-            ke, span1_vec, span2_vec = knowledge_encoder.encode_knowledge((' ').join(sentence_s), (span1, span1), (span2, span2))
+            ke, span1_vec, span2_vec = knowledge_encoder.encode_knowledge((' ').join(sentence_s), (span1, span1),
+                                                                          (span2, span2))
             data_set.append([doc_name, ke, ke, span1_vec, span2_vec, rel])
         else:
             sentence_s = ['[CLS]'] + sentence_s + ['[SEP]']
             sentence_t = ['[CLS]'] + sentence_t + ['[SEP]']
 
-            span1 = list(map(lambda x: x+1, span1))
-            span2 = list(map(lambda x: x+1, span2))
+            span1 = list(map(lambda x: x + 1, span1))
+            span2 = list(map(lambda x: x + 1, span2))
 
             sentence_vec_s = []
             sentence_vec_t = []
@@ -65,16 +67,13 @@ def get_sem_eval(datasets, opt_file_name, mask=True):
         pickle.dump(data_set, f, pickle.HIGHEST_PROTOCOL)
 
 
-
 if __name__ == '__main__':
-    #label_file = 'CausalTM/Causal-TempEval3-eval.txt'
-    #document_dir = 'CausalTM/TempEval3-eval_COL/'
-    #tempeval_results = generate_data(label_file, document_dir)
-    
-    #get_sem_eval(tempeval_results, 'tempeval_mask.pickle', mask=True)
-    #get_sem_eval(tempeval_results, 'tempeval.pickle', mask=False)
+    # label_file = 'CausalTM/Causal-TempEval3-eval.txt'
+    # document_dir = 'CausalTM/TempEval3-eval_COL/'
+    # tempeval_results = generate_data(label_file, document_dir)
 
-
+    # get_sem_eval(tempeval_results, 'tempeval_mask.pickle', mask=True)
+    # get_sem_eval(tempeval_results, 'tempeval.pickle', mask=False)
 
     label_file = 'CausalTM/Causal-TimeBank.CLINK.txt'
     document_dir = 'CausalTM/Causal-TimeBank_COL/'
@@ -82,7 +81,6 @@ if __name__ == '__main__':
 
     get_sem_eval(causalTB_results, 'causaltb2.pickle', mask=False)
     get_sem_eval(causalTB_results, 'causaltb_mask2.pickle', mask=True)
-
 
     random.shuffle(causalTB_results)
     l = int(len(causalTB_results) / 10 * 9)

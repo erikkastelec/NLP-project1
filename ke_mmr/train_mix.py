@@ -8,20 +8,20 @@ import gc
 from tqdm import tqdm
 import variables as variables
 
-
 from dataset import Dataset
 from model import BasicCausalModel, BertCausalModel
 from pytorch_pretrained_bert import BertAdam
 
 from util import get_topic, topic_c
 
+
 def split_train_test(dataset):
     train_set = []
     test_set = []
 
     test_topic = ['1', '3', '4', '5', '7', '8,'
-              '12', '13', '14', '16', '18', '19', '20'
-              '22', '23']
+                                           '12', '13', '14', '16', '18', '19', '20'
+                                                                               '22', '23']
     for data in dataset:
         t = data[0]
         if t.split('/')[-2] in test_topic:
@@ -68,8 +68,8 @@ np.random.seed(seed)
 torch.manual_seed(seed)
 torch.cuda.manual_seed_all(seed)
 
-def train_topic(st, tt):
 
+def train_topic(st, tt):
     device = torch.device("cuda")
 
     # with open('train_sem_mask.pickle', 'rb') as f:
@@ -98,9 +98,6 @@ def train_topic(st, tt):
     #     data = pickle.load(f)
     # train_set_mask, test_set_mask = data['train'], data['test']
 
-
-
-
     ### Reading data...
     with open('data.pickle', 'rb') as f:
         data = pickle.load(f)
@@ -110,10 +107,9 @@ def train_topic(st, tt):
 
     with open('data_mask.pickle', 'rb') as f:
         data_mask = pickle.load(f)
-    #train_set_mask, test_set_mask = split_train_test(data)
+    # train_set_mask, test_set_mask = split_train_test(data)
     train_set_mask = get_topic(data_mask, st)
     test_set_mask = get_topic(data_mask, tt)
-
 
     test_set, test_set_mask = test_set, test_set_mask
 
@@ -130,7 +126,6 @@ def train_topic(st, tt):
 
     test_dataset_mix = list(zip(test_dataset_batch, test_dataset_mask_batch))
 
-
     ###
     train_dataset = Dataset(20, train_set)
     train_dataset_mask = Dataset(20, train_set_mask)
@@ -140,28 +135,28 @@ def train_topic(st, tt):
 
     train_dataset_mix = list(zip(train_dataset_batch, train_dataset_mask_batch))
 
-
     model = BertCausalModel(3).to(device)
     model_mask = BertCausalModel(3).to(device)
-
 
     learning_rate = 1e-5
     optimizer = BertAdam(model.parameters(), lr=learning_rate)
     optimizer_mask = BertAdam(model_mask.parameters(), lr=learning_rate)
     loss_fn = torch.nn.CrossEntropyLoss(reduction='sum')
 
-
     for _ in range(0, 20):
         idx = 0
-        for batch, batch_mask in tqdm(train_dataset_mix, mininterval=2, total=len(train_dataset_mix), file=sys.stdout, ncols=80):
+        for batch, batch_mask in tqdm(train_dataset_mix, mininterval=2, total=len(train_dataset_mix), file=sys.stdout,
+                                      ncols=80):
             idx += 1
             model.train()
             model_mask.train()
             sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2, event2_mask, data_y, _ = batch
             sentences_s_mask = batch_mask[0]
 
-            opt = model.forward_logits(sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2, event2_mask)
-            opt_mask = model_mask.forward_logits(sentences_s_mask, mask_s, sentences_t, mask_t, event1, event1_mask, event2, event2_mask)
+            opt = model.forward_logits(sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2,
+                                       event2_mask)
+            opt_mask = model_mask.forward_logits(sentences_s_mask, mask_s, sentences_t, mask_t, event1, event1_mask,
+                                                 event2, event2_mask)
 
             opt_mix = torch.cat([opt, opt_mask], dim=-1)
             logits = model.additional_fc(opt_mix)
@@ -173,8 +168,6 @@ def train_topic(st, tt):
             optimizer.step()
             optimizer_mask.step()
 
-
-
         model.eval()
         model_mask.eval()
         with torch.no_grad():
@@ -184,7 +177,8 @@ def train_topic(st, tt):
                 sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2, event2_mask, data_y, _ = batch
                 sentences_s_mask = batch_mask[0]
 
-                opt = model.forward_logits(sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2, event2_mask)
+                opt = model.forward_logits(sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2,
+                                           event2_mask)
                 opt_mask = model_mask.forward_logits(sentences_s_mask, mask_s, sentences_t, mask_t, event1, event1_mask,
                                                      event2, event2_mask)
 
@@ -201,13 +195,12 @@ def train_topic(st, tt):
             print(p, r, f)
             print('Here')
 
+
 if __name__ == '__main__':
-
-
 
     # with open('data.pickle', 'rb') as f:
     #     data = pickle.load(f)
-    
+
     # all_topics = ['1', '3', '4', '5', '7', '8',
     #           '12', '13', '14', '16', '18', '19', '20',
     #           '22', '23', '24', '30', '32', '33', '35', '37', '41']
@@ -234,90 +227,76 @@ if __name__ == '__main__':
     #     tt = filt[0]
     #     print(tt)
     #     train_topic([tt[0]], [tt[1]])
-    
 
     ### train
     torch.cuda.empty_cache()
-
 
     del variables
     gc.collect()
     device = torch.device("cuda")
 
-
     with open('data/causaltb_train.pickle', 'rb') as f:
-         train_set = pickle.load(f)
-    
+        train_set = pickle.load(f)
+
     with open('data/causaltb_test.pickle', 'rb') as f:
-         test_set = pickle.load(f)
+        test_set = pickle.load(f)
 
-    
     with open('data/causaltb_train_mask.pickle', 'rb') as f:
-         train_set_mask = pickle.load(f)
-    
-    with open('data/causaltb_test_mask.pickle', 'rb') as f:
-         test_set_mask = pickle.load(f)
+        train_set_mask = pickle.load(f)
 
+    with open('data/causaltb_test_mask.pickle', 'rb') as f:
+        test_set_mask = pickle.load(f)
 
     # with open('data/event_causality.pickle', 'rb') as f:
-    #     data = pickle.load(f)
-
-    #     test_set_file = ['2010.01.13.google.china.exit', '2010.01.03.japan.jal.airlines.ft',
-    #         '2010.01.07.winter.weather', 
-    #         '2010.01.12.turkey.israel', 
-    #         '2010.01.12.uk.islamist.group.ban']
-    
-    # train_set = list(filter(lambda x: not x[0] in test_set_file, data))
-    # test_set = list(filter(lambda x: x[0] in test_set_file, data))
-
-
-    #with open('data/event_causality_mask.pickle', 'rb') as f:
     #     data = pickle.load(f)
 
     #     test_set_file = ['2010.01.13.google.china.exit', '2010.01.03.japan.jal.airlines.ft',
     #         '2010.01.07.winter.weather',
     #         '2010.01.12.turkey.israel',
     #         '2010.01.12.uk.islamist.group.ban']
-    
+
+    # train_set = list(filter(lambda x: not x[0] in test_set_file, data))
+    # test_set = list(filter(lambda x: x[0] in test_set_file, data))
+
+    # with open('data/event_causality_mask.pickle', 'rb') as f:
+    #     data = pickle.load(f)
+
+    #     test_set_file = ['2010.01.13.google.china.exit', '2010.01.03.japan.jal.airlines.ft',
+    #         '2010.01.07.winter.weather',
+    #         '2010.01.12.turkey.israel',
+    #         '2010.01.12.uk.islamist.group.ban']
+
     # train_set_mask = list(filter(lambda x: not x[0] in test_set_file, data))
     # test_set_mask = list(filter(lambda x: x[0] in test_set_file, data))
 
-    
     ######## do
-    #with open('data/event_causality_do.pickle', 'rb') as f:
+    # with open('data/event_causality_do.pickle', 'rb') as f:
     #    data = pickle.load(f)
 
-        # test_set_file = ['2010.01.13.google.china.exit', '2010.01.03.japan.jal.airlines.ft',
-        #     '2010.01.07.winter.weather', 
-        #     '2010.01.12.turkey.israel', 
-        #     '2010.01.12.uk.islamist.group.ban']
-        
+    # test_set_file = ['2010.01.13.google.china.exit', '2010.01.03.japan.jal.airlines.ft',
+    #     '2010.01.07.winter.weather',
+    #     '2010.01.12.turkey.israel',
+    #     '2010.01.12.uk.islamist.group.ban']
+
     #    test_set_file = ['2010.02.03.cross.quake.resistant.housing', '2010.01.13.haiti.un.mission', '2010.03.02.health.care', '2010.01.03.japan.jal.airlines.ft', '2010.01.07.water.justice', '2010.01.18.sherlock.holmes.tourism.london', '2010.01.02.pakistan.attacks', '2010.03.22.africa.elephants.ivory.trade', '2010.02.06.iran.nuclear', '2010.02.26.census.redistricting', '2010.02.05.sotu.crowley.column', '2010.03.23.how.get.headhunted', '2010.03.17.france.eta.policeman', '2010.01.06.tennis.qatar.federer.nadal', '2010.01.01.iran.moussavi', '2010.02.07.japan.prius.recall.ft', '2010.01.07.winter.weather', '2010.03.02.japan.unemployment.ft', '2010.01.18.uk.israel.livni', '2010.01.12.uk.islamist.group.ban']
-    
-    #train_set = list(filter(lambda x: not x[0] in test_set_file, data))
-    #test_set = list(filter(lambda x: x[0] in test_set_file, data))
 
+    # train_set = list(filter(lambda x: not x[0] in test_set_file, data))
+    # test_set = list(filter(lambda x: x[0] in test_set_file, data))
 
+    # with open('data/event_causality_do_mask.pickle', 'rb') as f:
+    #   data = pickle.load(f)
 
+    # test_set_file = ['2010.01.13.google.china.exit', '2010.01.03.japan.jal.airlines.ft',
+    #     '2010.01.07.winter.weather',
+    #     '2010.01.12.turkey.israel',
+    #     '2010.01.12.uk.islamist.group.ban']
 
-    #with open('data/event_causality_do_mask.pickle', 'rb') as f:
-     #   data = pickle.load(f)
-
-        # test_set_file = ['2010.01.13.google.china.exit', '2010.01.03.japan.jal.airlines.ft',
-        #     '2010.01.07.winter.weather', 
-        #     '2010.01.12.turkey.israel', 
-        #     '2010.01.12.uk.islamist.group.ban']
-        
     #    test_set_file = ['2010.02.03.cross.quake.resistant.housing', '2010.01.13.haiti.un.mission', '2010.03.02.health.care', '2010.01.03.japan.jal.airlines.ft', '2010.01.07.water.justice', '2010.01.18.sherlock.holmes.tourism.london', '2010.01.02.pakistan.attacks', '2010.03.22.africa.elephants.ivory.trade', '2010.02.06.iran.nuclear', '2010.02.26.census.redistricting', '2010.02.05.sotu.crowley.column', '2010.03.23.how.get.headhunted', '2010.03.17.france.eta.policeman', '2010.01.06.tennis.qatar.federer.nadal', '2010.01.01.iran.moussavi', '2010.02.07.japan.prius.recall.ft', '2010.01.07.winter.weather', '2010.03.02.japan.unemployment.ft', '2010.01.18.uk.israel.livni', '2010.01.12.uk.islamist.group.ban']
-    
-    #train_set_mask = list(filter(lambda x: not x[0] in test_set_file, data))
-    #test_set_mask = list(filter(lambda x: x[0] in test_set_file, data))
 
-
+    # train_set_mask = list(filter(lambda x: not x[0] in test_set_file, data))
+    # test_set_mask = list(filter(lambda x: x[0] in test_set_file, data))
 
     print('Train', len(train_set), 'Test', len(test_set))
-
-
 
     train_pair = list(zip(train_set, train_set_mask))
     train_pair = negative_sampling(train_pair)
@@ -332,7 +311,6 @@ if __name__ == '__main__':
 
     test_dataset_mix = list(zip(test_dataset_batch, test_dataset_mask_batch))
 
-
     ###
     train_dataset = Dataset(1, train_set)
     train_dataset_mask = Dataset(1, train_set_mask)
@@ -342,30 +320,28 @@ if __name__ == '__main__':
 
     train_dataset_mix = list(zip(train_dataset_batch, train_dataset_mask_batch))
 
-
     model = BertCausalModel(3).to(device)
     model_mask = BertCausalModel(3).to(device)
-
 
     learning_rate = 1e-5
     optimizer = BertAdam(model.parameters(), lr=learning_rate)
     optimizer_mask = BertAdam(model_mask.parameters(), lr=learning_rate)
     loss_fn = torch.nn.CrossEntropyLoss(reduction='sum')
 
-
     for _ in range(0, 100):
         idx = 0
-        for batch, batch_mask in tqdm(train_dataset_mix, mininterval=2, total=len(train_dataset_mix), file=sys.stdout, ncols=80):
+        for batch, batch_mask in tqdm(train_dataset_mix, mininterval=2, total=len(train_dataset_mix), file=sys.stdout,
+                                      ncols=80):
             idx += 1
             model.train()
             model_mask.train()
             sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2, event2_mask, data_y, _ = batch
             opt = model.forward_logits(sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2,
-                                            event2_mask)
+                                       event2_mask)
 
             sentences_s_mask, mask_s_mask, sentences_t_mask, mask_t_mask, event1_mask, event1_mask_mask, event2_mask, event2_mask_mask, data_y_mask, _ = batch_mask
             opt_mask = model_mask.forward_logits(sentences_s_mask, mask_s_mask, sentences_t_mask, mask_t_mask,
-                                                      event1_mask, event1_mask_mask, event2_mask, event2_mask_mask)
+                                                 event1_mask, event1_mask_mask, event2_mask, event2_mask_mask)
 
             opt_mix = torch.cat([opt, opt_mask], dim=-1)
             logits = model.additional_fc(opt_mix)
@@ -380,8 +356,6 @@ if __name__ == '__main__':
             optimizer.step()
             optimizer_mask.step()
 
-
-
     model.eval()
     model_mask.eval()
 
@@ -395,11 +369,12 @@ if __name__ == '__main__':
         gold_all = []
         for batch, batch_mask in test_dataset_mix:
             sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2, event2_mask, data_y, _ = batch
-            sentences_s_mask = batch_mask[0]
+            opt = model.forward_logits(sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2,
+                                       event2_mask)
 
-            opt = model.forward_logits(sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2, event2_mask)
-            opt_mask = model_mask.forward_logits(sentences_s_mask, mask_s, sentences_t, mask_t, event1, event1_mask,
-                                                 event2, event2_mask)
+            sentences_s_mask, mask_s_mask, sentences_t_mask, mask_t_mask, event1_mask, event1_mask_mask, event2_mask, event2_mask_mask, data_y_mask, _ = batch_mask
+            opt_mask = model_mask.forward_logits(sentences_s_mask, mask_s_mask, sentences_t_mask, mask_t_mask,
+                                                 event1_mask, event1_mask_mask, event2_mask, event2_mask_mask)
 
             opt_mix = torch.cat([opt, opt_mask], dim=-1)
             logits = model.additional_fc(opt_mix)

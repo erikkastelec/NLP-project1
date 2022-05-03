@@ -18,8 +18,6 @@ EPOCHS = 100
 
 class Trainer:
     def __init__(self, device='cuda', seed=1234):
-        torch.cuda.empty_cache()
-        gc.collect()
         self.device = torch.device(device)
         self.model = None
         self.model_mask = None
@@ -62,6 +60,8 @@ class Trainer:
         return p, r, f
 
     def train(self, train_set, train_set_mask, test_set, test_set_mask, model_path=None, batch_size=BATCH_SIZE, epochs=EPOCHS):
+        torch.cuda.empty_cache()
+        gc.collect()
         train_pair = list(zip(train_set, train_set_mask))
         train_pair = self.negative_sampling(train_pair)
         train_set, train_set_mask = [d[0] for d in train_pair], [d[1] for d in train_pair]
@@ -93,17 +93,15 @@ class Trainer:
         loss_fn = torch.nn.CrossEntropyLoss(reduction='sum')
 
         for epoch in tqdm(range(epochs), total=epochs, file=sys.stdout, desc='Epoch'):
-            for batch, batch_mask in tqdm(train_dataset_mix, mininterval=2, total=len(train_dataset_mix),
-                                          file=sys.stdout,
-                                          ncols=80):
+            for batch, batch_mask in train_dataset_mix:
                 model.train()
                 model_mask.train()
                 sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2, event2_mask, data_y, _ = batch
-                opt = self.model.forward_logits(sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2,
+                opt = model.forward_logits(sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2,
                                                 event2_mask)
 
                 sentences_s_mask, mask_s_mask, sentences_t_mask, mask_t_mask, event1_mask, event1_mask_mask, event2_mask, event2_mask_mask, data_y_mask, _ = batch_mask
-                opt_mask = self.model_mask.forward_logits(sentences_s_mask, mask_s_mask, sentences_t_mask, mask_t_mask,
+                opt_mask = model_mask.forward_logits(sentences_s_mask, mask_s_mask, sentences_t_mask, mask_t_mask,
                                                           event1_mask, event1_mask_mask, event2_mask, event2_mask_mask)
 
                 opt_mix = torch.cat([opt, opt_mask], dim=-1)
@@ -118,6 +116,7 @@ class Trainer:
                 loss.backward()
                 optimizer.step()
                 optimizer_mask.step()
+                #torch.cuda.empty_cache()
 
         model.eval()
         model_mask.eval()
@@ -139,8 +138,8 @@ class Trainer:
                                            event2_mask)
 
                 sentences_s_mask, mask_s_mask, sentences_t_mask, mask_t_mask, event1_mask, event1_mask_mask, event2_mask, event2_mask_mask, data_y_mask, _ = batch_mask
-                opt_mask = model_mask.forward_logits(sentences_s_mask, mask_s, sentences_t, mask_t, event1, event1_mask,
-                                                     event2, event2_mask)
+                opt_mask = model_mask.forward_logits(sentences_s_mask, mask_s_mask, sentences_t_mask, mask_t_mask,
+                                                     event1_mask, event1_mask_mask, event2_mask, event2_mask_mask)
 
                 opt_mix = torch.cat([opt, opt_mask], dim=-1)
                 logits = model.additional_fc(opt_mix)

@@ -34,6 +34,26 @@ class KEMMGPredictor:
         self.knowledge_encoder = KnowledgeEncoder(self.tokenizer, knowledge_limit)
         self.masker = MentionMaskingReasoner(self.tokenizer)
 
+    def compute_f1(self, gold, predicted):
+        c_predict = 0
+        c_correct = 0
+        c_gold = 0
+
+        for g, p in zip(gold, predicted):
+            if g != 0:
+                c_gold += 1
+            if p != 0:
+                c_predict += 1
+            if g != 0 and p != 0:
+                c_correct += 1
+
+        p = c_correct / (c_predict + 1e-100)
+        r = c_correct / c_gold
+        f = 2 * p * r / (p + r + 1e-100)
+
+        print('correct', c_correct, 'predicted', c_predict, 'golden', c_gold)
+        return p, r, f
+
     def transform(self, sentence, event1_index, event2_index, doc_name=None, label=None):
         emb_sen, e1i, e2i = self.knowledge_encoder.encode_knowledge(sentence, event1_index, event2_index)
         emb_kg = [doc_name, emb_sen, emb_sen, e1i, e2i, label]
@@ -76,8 +96,12 @@ class KEMMGPredictor:
 
         return predicted
 
-    def predict(self, sentence, event1_index, event2_index, doc_name=None, label=None):
-        emb_kg, emb_mask = self.transform(sentence, event1_index, event2_index, doc_name=doc_name, label=label)
+    def predict(self, data, doc_name=None, label=None, need_embedding=True):
+        if need_embedding:
+            sentence, event1_index, event2_index = data
+            emb_kg, emb_mask = self.transform(sentence, event1_index, event2_index, doc_name=doc_name, label=label)
+        else:
+            emb_kg, emb_mask = data
         return self.predict_inner(emb_kg, emb_mask)
 
     def predict_all_inner(self, test_set, test_set_mask, batch_size=7):
@@ -91,6 +115,7 @@ class KEMMGPredictor:
 
         with torch.no_grad():
             predicted_all = []
+            gold_all = []
             for batch, batch_mask in tqdm(dataset_mix, desc='Predicting', total=len(dataset_mix), file=sys.stdout):
                 sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2, event2_mask, data_y, _ = batch
                 opt = self.model.forward_logits(sentences_s, mask_s, sentences_t, mask_t, event1, event1_mask, event2,
@@ -106,17 +131,27 @@ class KEMMGPredictor:
                 predicted = list(predicted.cpu().numpy())
                 predicted_all += predicted
 
-        return predicted_all
+                gold = list(data_y.cpu().numpy())
+                gold_all += gold
 
-    def predict_all(self, data, batch_size=7):
-        knowledge_list, mask_list = self.transform_all(data)
-        predicted = self.predict_all_inner(knowledge_list, mask_list, batch_size=batch_size)
+        return predicted_all, gold_all
+
+    def predict_all(self, data, batch_size=7, need_embedding=True):
+        if need_embedding:
+            knowledge_list, mask_list = self.transform_all(data)
+        else:
+            knowledge_list, mask_list = data
+        predicted, _ = self.predict_all_inner(knowledge_list, mask_list, batch_size=batch_size)
         return predicted
 
-    def predict_all_eval(self, data, batch_size=7):
-        knowledge_list, mask_list = self.transform_all(data)
-        predicted = self.predict_all_inner(knowledge_list, mask_list, batch_size=batch_size)
-        return predicted
+    def predict_all_eval(self, data, batch_size=7, need_embedding=True):
+        if need_embedding:
+            knowledge_list, mask_list = self.transform_all(data)
+        else:
+            knowledge_list, mask_list = data
+        predicted, gold = self.predict_all_inner(knowledge_list, mask_list, batch_size=batch_size)
+        p, r, f = self.compute_f1(predicted, gold)
+        return predicted, gold, p, r, f
 
 
 if __name__ == '__main__':
