@@ -7,7 +7,7 @@
 
 ### Relationship extraction
 
-[Python notebook](./Relation_extraction/notebook.ipynb)
+[Python notebook](./Relation_extracting/notebook.ipynb)
 
 ### Event causality identification
 
