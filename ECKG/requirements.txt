@@ -12,3 +12,4 @@ python-Levenshtein
 fuzzywuzzy
 simstring-pure
 progressbar2
+networkx

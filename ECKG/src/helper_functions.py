@@ -3,6 +3,7 @@ import os
 import pickle
 from collections import Counter
 
+import networkx as nx
 from fuzzywuzzy import fuzz
 from fuzzywuzzy.process import extract
 from simstring.database.dict import DictDatabase
@@ -11,7 +12,62 @@ from simstring.measure.cosine import CosineMeasure
 from simstring.searcher import Searcher
 
 
-def deduplicate_named_entities(data, map=True):
+def map_text(text, mapper):
+    distinct_entities = set()
+
+    for key, value in mapper.items():
+        text = text.replace(key, value)
+        distinct_entities.add(value)
+
+    return text, distinct_entities
+
+
+def is_similar_string(a, b, similarity=70):
+    return fuzz.token_set_ratio(a, b) > similarity
+
+
+def find_similar(a, l, similarity=70):
+    res = extract(a, l, limit=1, scorer=fuzz.token_set_ratio)
+    if res[0][1] > 70:
+        return res[0][0]
+
+    return None
+
+
+def create_graph_from_pairs(pairs):
+    MG = nx.MultiGraph()
+    MG.add_weighted_edges_from([(x, y, 1) for x, _, y in pairs])
+    # MG.degree(weight='weight')
+
+    # Convert MultiGraph to Graph
+    GG = nx.Graph()
+    for n, nbrs in MG.adjacency():
+
+        for nbr, edict in nbrs.items():
+            value = len(edict.values())
+            GG.add_edge(n, nbr, weight=value)
+
+    return GG
+
+
+def fix_ner(data):
+    """
+    Fixes common problems with NER (detecting only ADJ and not noun after it)
+    """
+    data.entities = []
+    for i, sentence in enumerate(data.sentences):
+        if len(sentence.entities) != 0:
+            for j, ent in enumerate(sentence.entities):
+                if len(ent.words) == 1:
+                    if ent.words[0].upos == "ADJ" and data.sentences[i].words[ent.words[0].head - 1].upos == "NOUN":
+                        data.sentences[i].entities[j].tokens.append(
+                            data.sentences[i].words[ent.words[0].head - 1].parent)
+                        data.sentences[i].entities[j].words.append(data.sentences[i].words[ent.words[0].head - 1])
+                data.entities.append(data.sentences[i].entities[j])
+    return data
+
+
+def deduplicate_named_entities(data, map=True, count_entities=True):
     """
     Cleans data by removing duplicates from extracted named entities
     Args:
@@ -33,14 +89,19 @@ def deduplicate_named_entities(data, map=True):
     entities = {}
     entities_alias = {}
     db = DictDatabase(CharacterNgramFeatureExtractor(2))
-    count = 0
     searcher = Searcher(db, CosineMeasure())
-
-    for j, entity in enumerate(data.entities):
+    try:
+        data = data.entities
+    except AttributeError:
+        data = data
+    for j, entity in enumerate(data):
         added = False
         # combine tokens (eg: "Novo", "mesto" -> "Novo mesto")
-        name = " ".join([x.text for x in entity.tokens])
-        count = 1
+
+        try:
+            name = " ".join([x.text for x in entity.tokens])
+        except Exception:
+            name = entity
         # Try finding it in aliases
         try:
             e = entities_alias[name]
@@ -74,20 +135,26 @@ def deduplicate_named_entities(data, map=True):
         res = {}
     else:
         res = []
+    count_dict = {}
     for key, values in entities.items():
         most_frequent = most_frequent_item(values)
+        if count_entities:
+            count_dict[most_frequent] = len(values)
         if map:
             for value in values:
                 res[value] = most_frequent
         else:
             map.append(most_frequent)
+
+    if count_entities:
+        res = (res, count_dict)
+
     return res
 
 
 def most_frequent_item(l):
     counter = 0
     num = l[0]
-
     for i in l:
         curr_frequency = l.count(i)
         if (curr_frequency > counter):
