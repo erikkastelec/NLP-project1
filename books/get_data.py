@@ -75,8 +75,12 @@ def get_data(file_path, get_text=False):
 
             text = None
             if get_text:
+                if len(file_path.split("/")) == 1:
+                    text_path = split[0]
+                else:
+                    text_path = "/".join(file_path.split("/")[:-1]) + "/" + split[0]
                 try:
-                    with open(split[0], 'r') as f2:
+                    with open(text_path, 'r') as f2:
                         text = f2.read()
                 except:
                     text = None
@@ -124,3 +128,4 @@ def get_data(file_path, get_text=False):
 
 if __name__ == '__main__':
     data = get_data(FILE_PATH, get_text=True)
+    print("test")

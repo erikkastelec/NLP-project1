@@ -2,8 +2,10 @@ import errno
 import os
 import pickle
 from collections import Counter
+from itertools import combinations
 
 import networkx as nx
+from classla import Document
 from fuzzywuzzy import fuzz
 from fuzzywuzzy.process import extract
 from simstring.database.dict import DictDatabase
@@ -67,6 +69,24 @@ def create_graph_from_pairs(pairs):
     return GG
 
 
+def get_relations_from_sentences(data: Document, ner_mapper: dict):
+    """
+    Find pairs of entities, which co-occurre in the same sentence.
+    Returns:
+        list of entity verb entity pairs
+        TODO: verb extraction -> None for now
+    """
+    pairs = []
+    for i, sentence in enumerate(data.sentences):
+        if len(sentence.entities) > 1:
+            curr_words = []
+            for j, entity in enumerate(sentence.entities):
+                curr_words.append(" ".join(x.text for x in entity.words))
+            for x, y in combinations(curr_words, 2):
+                pairs.append((x, None, y))
+    return pairs
+
+
 def fix_ner(data):
     """
     Fixes common problems with NER (detecting only ADJ and not noun after it)
@@ -74,12 +94,13 @@ def fix_ner(data):
     data.entities = []
     for i, sentence in enumerate(data.sentences):
         if len(sentence.entities) != 0:
-            for j, ent in enumerate(sentence.entities):
-                if len(ent.words) == 1:
-                    if ent.words[0].upos == "ADJ" and data.sentences[i].words[ent.words[0].head - 1].upos == "NOUN":
+            for j, entity in enumerate(sentence.entities):
+                if len(entity.words) == 1:
+                    if entity.words[0].upos == "ADJ" and data.sentences[i].words[
+                        entity.words[0].head - 1].upos == "NOUN":
                         data.sentences[i].entities[j].tokens.append(
-                            data.sentences[i].words[ent.words[0].head - 1].parent)
-                        data.sentences[i].entities[j].words.append(data.sentences[i].words[ent.words[0].head - 1])
+                            data.sentences[i].words[entity.words[0].head - 1].parent)
+                        data.sentences[i].entities[j].words.append(data.sentences[i].words[entity.words[0].head - 1])
                 data.entities.append(data.sentences[i].entities[j])
     return data
 
