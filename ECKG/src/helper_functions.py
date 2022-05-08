@@ -2,14 +2,19 @@ import errno
 import os
 import pickle
 from collections import Counter
+from itertools import combinations
 
+import classla
 import networkx as nx
+from classla import Document
 from fuzzywuzzy import fuzz
 from fuzzywuzzy.process import extract
 from simstring.database.dict import DictDatabase
 from simstring.feature_extractor.character_ngram import CharacterNgramFeatureExtractor
 from simstring.measure.cosine import CosineMeasure
 from simstring.searcher import Searcher
+
+from books.get_data import get_data
 
 
 def map_text(text, mapper):
@@ -20,6 +25,23 @@ def map_text(text, mapper):
         distinct_entities.add(value)
 
     return text, distinct_entities
+
+
+def graph_entity_importance_evaluation(G: nx.Graph, centrality_weights=None):
+    if centrality_weights is None:
+        centrality_weights = [0.2, 0.2, 0.2]
+    eigenvector_centrality = list(nx.eigenvector_centrality(G).values())
+    degree_centrality = list(nx.degree_centrality(G).values())
+    closeness_centrality = list(nx.closeness_centrality(G).values())
+    # betweeenness_centrality = list(nx.betweeenness_centrality(G).values)
+    centralities = [eigenvector_centrality, degree_centrality, closeness_centrality]
+
+    assert len(centralities) == len(centrality_weights)
+    res = [0 for _ in range(len(centralities[0]))]
+    for centrality, weight in zip(centralities, centrality_weights):
+        for i in range(len(centrality)):
+            res[i] += centrality[i] * weight
+    return res
 
 
 def is_similar_string(a, b, similarity=70):
@@ -50,6 +72,27 @@ def create_graph_from_pairs(pairs):
     return GG
 
 
+def get_relations_from_sentences(data: Document, ner_mapper: dict):
+    """
+    Find pairs of entities, which co-occurre in the same sentence.
+    Returns:
+        list of entity verb entity pairs
+        TODO: verb extraction -> None for now
+    """
+    pairs = []
+    for i, sentence in enumerate(data.sentences):
+        if len(sentence.entities) > 1:
+            curr_words = []
+            for j, entity in enumerate(sentence.entities):
+                curr_words.append(" ".join(x.text for x in entity.words))
+            for x, y in combinations(curr_words, 2):
+                try:
+                    pairs.append((ner_mapper[x], None, ner_mapper[y]))
+                except KeyError:
+                    print("WARNING")
+    return pairs
+
+
 def fix_ner(data):
     """
     Fixes common problems with NER (detecting only ADJ and not noun after it)
@@ -57,12 +100,13 @@ def fix_ner(data):
     data.entities = []
     for i, sentence in enumerate(data.sentences):
         if len(sentence.entities) != 0:
-            for j, ent in enumerate(sentence.entities):
-                if len(ent.words) == 1:
-                    if ent.words[0].upos == "ADJ" and data.sentences[i].words[ent.words[0].head - 1].upos == "NOUN":
+            for j, entity in enumerate(sentence.entities):
+                if len(entity.words) == 1:
+                    if entity.words[0].upos == "ADJ" and data.sentences[i].words[
+                        entity.words[0].head - 1].upos == "NOUN":
                         data.sentences[i].entities[j].tokens.append(
-                            data.sentences[i].words[ent.words[0].head - 1].parent)
-                        data.sentences[i].entities[j].words.append(data.sentences[i].words[ent.words[0].head - 1])
+                            data.sentences[i].words[entity.words[0].head - 1].parent)
+                        data.sentences[i].entities[j].words.append(data.sentences[i].words[entity.words[0].head - 1])
                 data.entities.append(data.sentences[i].entities[j])
     return data
 
@@ -85,6 +129,7 @@ def deduplicate_named_entities(data, map=True, count_entities=True):
             else:
                 ["Slovenija"]
     """
+    db_helper = {}
     # Put in list if single Classla Document is provided
     entities = {}
     entities_alias = {}
@@ -102,6 +147,7 @@ def deduplicate_named_entities(data, map=True, count_entities=True):
             name = " ".join([x.text for x in entity.tokens])
         except Exception:
             name = entity
+
         # Try finding it in aliases
         try:
             e = entities_alias[name]
@@ -112,10 +158,13 @@ def deduplicate_named_entities(data, map=True, count_entities=True):
             added = True
         except KeyError:
             # Reduce complexity by performing fuzzy matching if searcher score is at least 0.6
-            results = searcher.ranked_search(name, 0.6)
+
+            results = searcher.ranked_search(name.lower(), 0.6)
             for i, (_, e_name) in enumerate(results):
                 if fuzz.token_set_ratio(name, e_name) > 70:
                     added = True
+                    # print(e_name)
+                    e_name = db_helper[e_name]
                     # if key != entities[e][e][0][0][1]:
                     #
                     #     del ner[key][i]
@@ -130,7 +179,8 @@ def deduplicate_named_entities(data, map=True, count_entities=True):
             if not added:
                 entities[name] = [name]
                 entities_alias[name] = name
-                db.add(name)
+                db.add(name.lower())
+                db_helper[name.lower()] = name
     if map:
         res = {}
     else:
@@ -334,21 +384,46 @@ def slo_month_to_num(month):
 
 
 if __name__ == "__main__":
-    # print("hello")
-    # Initialize CLASSLA pipeline
-    # classla.download('sl')
-    # nlp = classla.Pipeline("sl", processors='tokenize,ner')
-    # ner_res = ner_extraction("Strokovna svetovalna skupina za covid-19 je že minuli teden predlagala podaljšanje epidemije, pogoji za to pa so še vedno izpolnjeni, je izpostavila vodja skupine in infektologinja Mateja Logar. Se pa, če bodo tudi v sredo epidemiološki podatki ugodni, po njenih navedbah sproščajo pogoji za rumeno fazo in s tem povezano sproščanje ukrepov.\
-    #                Strokovna svetovalna skupina je že minuli teden predlagala podaljšanje epidemije, pogoji za to pa so še vedno izpolnjeni, je izpostavila vodja skupine in infektologinja Mateja. Se pa, če bodo tudi v sredo epidemiološki podatki ugodni, po njenih navedbah sproščajo pogoji za rumeno fazo in s tem povezano sproščanje ukrepov.\
-    #                Strokovna svetovalna skupina je. NSI je stranka, ki je v minulem letu. Vodstvo LMS-ja je lani opravilo.", nlp)
-    # for key, value in ner_res.items():
-    #     print("Values for ", key, ": ", value)
-    article = {
-        "name": "mursic-govoriti-da-so-ljudje-krivi-ker-so-poredni-je-omalovazujoce-549022.txt",
-        "category": "slovenija"
-    }
-    # print(get_link_from_article("RTVSLO", article))
-    # print(fuzzywuzzy_custom_dedupe(["Joze Anton", "Joze Antonov", "Miha Novak", "Novak Miha"]))
-    v = "Minister Gantar"
-    v = v[9:]
-    print(v)
+    corpus = get_data("../../books/corpus.tsv", get_text=True)
+    # Initialize Slovene classla pipeline
+    classla.download('sl')
+    sl_pipeline = classla.Pipeline("sl", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
+    # Analyze using classla/stanza to get Document format
+    sl_text = corpus[6].text
+    data = sl_pipeline(sl_text)
+    print("extracted named entities".upper())
+    data = fix_ner(data)
+
+    print([" ".join([y.text for y in x.tokens]) for x in data.entities])
+
+    # Run named entity deduplication/resolution
+    deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True)
+
+    print("deduplication mapper".upper())
+    print(deduplication_mapper)
+    dedup_keys = deduplication_mapper.keys()
+
+    # 1. IMPORTANCE BASED ON NUMBER OF OCCURRENCES IN THE TEXT
+    print("1. IMPORTANCE BASED ON NUMBER OF OCCURRENCES IN THE TEXT")
+    count = dict(sorted(count.items(), key=lambda x: -x[1]))
+    t = 0
+    for key, value in count.items():
+        print(key + ": " + str(value))
+    # # print("hello")
+    # # Initialize CLASSLA pipeline
+    # # classla.download('sl')
+    # # nlp = classla.Pipeline("sl", processors='tokenize,ner')
+    # # ner_res = ner_extraction("Strokovna svetovalna skupina za covid-19 je že minuli teden predlagala podaljšanje epidemije, pogoji za to pa so še vedno izpolnjeni, je izpostavila vodja skupine in infektologinja Mateja Logar. Se pa, če bodo tudi v sredo epidemiološki podatki ugodni, po njenih navedbah sproščajo pogoji za rumeno fazo in s tem povezano sproščanje ukrepov.\
+    # #                Strokovna svetovalna skupina je že minuli teden predlagala podaljšanje epidemije, pogoji za to pa so še vedno izpolnjeni, je izpostavila vodja skupine in infektologinja Mateja. Se pa, če bodo tudi v sredo epidemiološki podatki ugodni, po njenih navedbah sproščajo pogoji za rumeno fazo in s tem povezano sproščanje ukrepov.\
+    # #                Strokovna svetovalna skupina je. NSI je stranka, ki je v minulem letu. Vodstvo LMS-ja je lani opravilo.", nlp)
+    # # for key, value in ner_res.items():
+    # #     print("Values for ", key, ": ", value)
+    # article = {
+    #     "name": "mursic-govoriti-da-so-ljudje-krivi-ker-so-poredni-je-omalovazujoce-549022.txt",
+    #     "category": "slovenija"
+    # }
+    # # print(get_link_from_article("RTVSLO", article))
+    # # print(fuzzywuzzy_custom_dedupe(["Joze Anton", "Joze Antonov", "Miha Novak", "Novak Miha"]))
+    # v = "Minister Gantar"
+    # v = v[9:]
+    # print(v)

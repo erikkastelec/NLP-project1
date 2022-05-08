@@ -1,5 +1,6 @@
 FILE_PATH = 'corpus.tsv'
 
+
 def get_person_id(person, people):
     for p in people:
         if p.name == person:
@@ -9,10 +10,12 @@ def get_person_id(person, people):
         if p.name in p.sinonims:
             return p.id
 
+
 def get_person(id, people):
     for p in people:
         if p.id == id:
             return p
+
 
 def get_relation_by_ids(relation, people):
     s = relation.split(' ')
@@ -40,7 +43,8 @@ class Person:
 
 
 class Book:
-    def __init__(self, filename, language, title, author, year, num_words, characters, protagonists, protagonists_id, protagonists_names, antagonists, antagonists_id, antagonists_names, relations, text):
+    def __init__(self, filename, language, title, author, year, num_words, characters, protagonists, protagonists_id,
+                 protagonists_names, antagonists, antagonists_id, antagonists_names, relations, text):
         self.file_name = filename
         self.language = language
         self.title = title
@@ -71,8 +75,12 @@ def get_data(file_path, get_text=False):
 
             text = None
             if get_text:
+                if len(file_path.split("/")) == 1:
+                    text_path = split[0]
+                else:
+                    text_path = "/".join(file_path.split("/")[:-1]) + "/" + split[0]
                 try:
-                    with open(split[0], 'r') as f2:
+                    with open(text_path, 'r') as f2:
                         text = f2.read()
                 except:
                     text = None
@@ -96,7 +104,6 @@ def get_data(file_path, get_text=False):
                 protagonists_id = [get_person_id(p, characters) for p in protagonists_names]
                 protagonists = [get_person(p, characters) for p in protagonists_id]
 
-
             if len(antagonists_names) == 1 and antagonists_names[0] == '' or antagonists_names[0] == '?':
                 antagonists_names = []
                 antagonists_id = []
@@ -105,18 +112,20 @@ def get_data(file_path, get_text=False):
                 antagonists_id = [get_person_id(p, characters) for p in antagonists_names]
                 antagonists = [get_person(p, characters) for p in antagonists_id]
 
-
             relations = split[9].split(', ')
             if len(relations) == 1 and relations[0] == '':
                 relations_ids = []
             else:
                 relations_ids = [get_relation_by_ids(r, characters) for r in relations]
 
-            new_book = Book(split[0], split[1], split[2], split[3], int(split[4]), int(split[5]), characters, protagonists, protagonists_id, protagonists_names, antagonists, antagonists_id, antagonists_names, relations_ids, text)
+            new_book = Book(split[0], split[1], split[2], split[3], int(split[4]), int(split[5]), characters,
+                            protagonists, protagonists_id, protagonists_names, antagonists, antagonists_id,
+                            antagonists_names, relations_ids, text)
 
             books.append(new_book)
     return books
 
+
 if __name__ == '__main__':
     data = get_data(FILE_PATH, get_text=True)
-    print(data)
+    print("test")

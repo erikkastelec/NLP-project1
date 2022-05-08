@@ -5,11 +5,14 @@ from eventify import *
 from helper_functions import *
 
 # coreferece or events
-MODE = "coreference"
+MODE = "a"
 # sl or en
 LANGUAGE = "sl"
 
 if __name__ == '__main__':
+    pipeline = classla.Pipeline("sl", processors='tokenize,ner, lemma, pos', use_gpu=True)
+    x = pipeline('Oče je obiskal svojega sina Janeza. Sin je pravi hlapec.').entities
+    exit()
     if MODE == "coreference":
 
         model_name = "baseline_model_senticoref"
