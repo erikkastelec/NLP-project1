@@ -14,6 +14,7 @@ from simstring.feature_extractor.character_ngram import CharacterNgramFeatureExt
 from simstring.measure.cosine import CosineMeasure
 from simstring.searcher import Searcher
 
+from ECKG.src.eventify import Eventify
 from books.get_data import get_data
 
 
@@ -29,7 +30,7 @@ def map_text(text, mapper):
 
 def graph_entity_importance_evaluation(G: nx.Graph, centrality_weights=None):
     if centrality_weights is None:
-        centrality_weights = [0.2, 0.2, 0.2]
+        centrality_weights = [0.33, 0.33, 0.33]
     eigenvector_centrality = list(nx.eigenvector_centrality(G).values())
     degree_centrality = list(nx.degree_centrality(G).values())
     closeness_centrality = list(nx.closeness_centrality(G).values())
@@ -41,6 +42,7 @@ def graph_entity_importance_evaluation(G: nx.Graph, centrality_weights=None):
     for centrality, weight in zip(centralities, centrality_weights):
         for i in range(len(centrality)):
             res[i] += centrality[i] * weight
+    res = zip(*sorted(zip(list(G.nodes), res), key=lambda x: -x[1]))
     return res
 
 
@@ -64,7 +66,6 @@ def create_graph_from_pairs(pairs):
     # Convert MultiGraph to Graph
     GG = nx.Graph()
     for n, nbrs in MG.adjacency():
-
         for nbr, edict in nbrs.items():
             value = len(edict.values())
             GG.add_edge(n, nbr, weight=value)
@@ -213,6 +214,43 @@ def most_frequent_item(l):
 
     return num
 
+
+def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper):
+    dedup_keys = deduplication_mapper.keys()
+    events = e.eventify(book.text)
+    NER_containing_events = []
+    event_entity_count = {}
+    event_entities = []
+    event_tmp = []
+    for s, v, o in events:
+        if isinstance(s, tuple) or isinstance(o, tuple):
+            continue
+        s_sim = find_similar(s, dedup_keys)
+        o_sim = find_similar(o, dedup_keys)
+        if s_sim is not None and o_sim is not None:
+            s = deduplication_mapper[s_sim]
+            o = deduplication_mapper[o_sim]
+            NER_containing_events.append((s, v, o))
+
+        elif s != '<|EMPTY|>' and o != '<|EMPTY|>' and len(s.split()) < 3 and len(o.split()) < 3 and (
+                s_sim is not None or o_sim is not None):
+            event_entities.append(o)
+            event_entities.append(s)
+            try:
+                event_entity_count[s] += 1
+            except KeyError:
+                event_entity_count[s] = 1
+            try:
+                event_entity_count[o] += 1
+            except KeyError:
+                event_entity_count[o] = 1
+            # event_tmp.append((s, v, o))
+
+    deduplication_mapper, count = deduplicate_named_entities(event_entities, count_entities=True)
+    for s, v, o in event_tmp:
+        NER_containing_events.append((deduplication_mapper[s], v, deduplication_mapper[o]))
+
+    return NER_containing_events
 
 def remove_from_list(list, unwanted_indexes):
     """

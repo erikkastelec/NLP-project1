@@ -1,24 +1,29 @@
-filename	language	title	author	year	number of words	antagonists	protagonists	main characters	relation/interaction (+ positive, - negative, / neutral) 	ambiguous
+filename	language	title	author	year	number of words	antagonists	protagonists	characters	relation/interaction (+ positive, - negative, / neutral) 	ambiguous
 hansel_and_gretel.txt	english	Hansel and Gretel	Jacob and Wilhelm Grimm	1857	2738	Witch, Mother	Hansel, Gretel	Hansel, Gretel, Witch, Father, Mother	Hansel + Gretel, Hansel - Witch, Gretel - Witch, Hansel - Mother, Gretel - Mother, Father / Mother	
 little_red_cap.txt	english	Little Red Cap	Jacob and Wilhelm Grimm	1857	1346	Wolf 1, Wolf 2	Little Red Cap	Little Red Cap, Grandmother, Wolf 1, Huntsman, Wolf 2, Mother	Little Red Cap + Grandmother, Little Red Cap + Mother, Little Red Cap + Huntsman,  Little Red Cap - Wolf 1, Grandmother - Wolf 1, Huntsman - Wolf 1, Grandmother + Huntsman, Little Red Cap - Wolf 2	
 rapunzel.txt	english	Rapunzel	Jacob and Wilhelm Grimm	1857	1302	Sorceress	Rapunzel	Rapunzel, Sorceress, Prince, Mother/Wife, Father/Husband	Rapunzel - Sorceress, Father - Sorceress, Prince - Sorceress, Mother + Father, Prince + Rapunzel	
-the_frog_prince.txt	english	The Frog Prince	Jacob and Wilhelm Grimm	1815	1068	Fairy	Princess	Princess, Frog/Prince, King	Princess + King, Princess - Frog, Prince - Fairy, Princess - Prince	1
-	english									
-hlapci.txt	slovenian	Hlapci	Ivan Cankar	1910	14461	Župnik	Jerman	Jerman, Župnik, Hvastja, Kalander	Jerman - Župnik, Jerman - Hvastja, Jerman + Kalander, Kalander - Hvastja	
-cvetje_v_jeseni.txt	slovenian	Cvetje v jeseni	Ivan Tavcar	1917	26568		Janez, Meta	Janez, Meta	Janez + Meta	
-deseti_brat.txt	slovenian	Deseti brat	Josip Jurčič	1866	67481					
-dogodek_v_mestu_gogi.txt	slovenian	Dogodek v mestu Gogi	Slavko Grum	1930	17260	Prelih	Hana	Hana, Prelih, Vajda	Hana - Prelih, Hana - Vajda	
-	slovenian									
+the_frog_prince.txt	english	The Frog Prince	Jacob and Wilhelm Grimm	1815	1068	Fairy	Princess	Princess, Frog, Prince, King, Fairy	Princess + King, Princess - Frog, Prince - Fairy, Princess - Prince	1
+harry_potter_1.txt	english	Harry Potter 1	J. K. Rowling	1997	78468	Voldemort, Draco	Harry	Harry, Hermione, Ron, Hagrid, Albus/Dumbledore, Voldemort, Draco, Neville, McGonagall, Snape, Quirrel, Vernon/Mr. Dursley, Petunia/Mrs. Dursley, Dudley	Harry + Hermione, Harry + Ron, Ron + Hermione, Harry + Hagrid, Harry - Voldemort, Harry - Draco, Harry - Snape, Harry - Vernon, Harry - Petunia, Harry - Dudley, Dudley + Petunia, Dudley + Vernon, Harry + Albus	
+little_brier_rose.txt	english	Little Brier-Rose	Jacob and Wilhelm Grimm	1857	1275	Thirteenth	Little Brier-Rose	Little Brier-Rose/Princess, Prince, King, Queen, Wise women, Thirteenth, Frog, Old woman	Princess + Prince, Princess - Thirteenth, King - Thirteenth, Queen - Thirteenth, Wise women + Queen, Wise women + King, Wise women + Princess	
+hlapci.txt	slovenian	Hlapci	Ivan Cankar	1910	14461	Župnik	Jerman	Jerman/Učitelj Jerman, Župnik, Hvastja/Učitelj Hvastja, Kalander/Kovač Kalander, Lojzka/Učiteljica Lojzka, Komar, Anka	Jerman - Župnik, Jerman - Hvastja, Jerman + Kalander, Kalander - Hvastja	
+cvetje_v_jeseni.txt	slovenian	Cvetje v jeseni	Ivan Tavcar	1917	26568		Janez, Meta	Janez, Meta, Liza, Danijel	Janez + Meta	
+deseti_brat.txt	slovenian	Deseti brat	Josip Jurčič	1866	67481	Marijan	Lovro	Lovro/Lovro Kvas, Martinek/Martinek Spak, Dolef, Peter/Peter Kaves/Gospod Piškav, Marijan/Marijan Piškav, Krjavelj, Benjamin, Manica	Lovro - Marijan, Marijan + Manica, Martinek - Marijan, Lovro + Manica, Peter - Martinek, Benjamin + Lovro	
+dogodek_v_mestu_gogi.txt	slovenian	Dogodek v mestu Gogi	Slavko Grum	1930	17260	Prelih	Hana	Hana, Prelih, Vajda, Klikot, Tarbula, Afra, Juta, Klef, Gapit, Teobald, Gospa Prestopil/Prestopil, Tereza, Erik, Elza, Klef	Hana - Prelih, Hana - Vajda	
+trnuljčica.txt	slovenian	Trnuljčica	Jacob and Wilhelm Grimm	1857	681	Trinajsta vila	Trnuljčica, Princ	Trnuljčica/Deklica/Princesa, Princ, Kralj, Kraljica, Dvanajst vil/Vile, Trinajsta vila/Trinajsta, Žaba, Stara ženička	Princ + Trnuljčica, Trinajsta vila - Kralj, Trinajsta vila - Kraljica, Trinajsta vila - Trnuljčica	
+harry_potter_1_slo.txt	slovenian	Harry Potter 1	J. K. Rowling	1997	73799	Mrlakenstein, Dreco	Harry	Harry, Hermiona, Ron, Hagrid, Albus/Dumbledore, Mrlakenstein, Dreco, Neville, McHudurra, Robaus/Raws, Smottan, Vernon/Gospod Dursley, Petunia/Gospa Dursley, Dudley	Harry + Hermiona, Harry + Ron, Ron + Hermiona, Harry + Hagrid, Harry - Mrlakenstein, Harry - Dreco, Harry - Raws, Harry - Vernon, Harry - Petunia, Harry - Dudley, Dudley + Petunia, Dudley + Vernon, Harry + Albus	
 										
-snow_white.txt	english	Little Snow-White	Jacob and Wilhelm Grimm	1812	1907	Queen	Snow White	Snow White, Queen, Mirror, seven dwarfs, Huntsman, Prince	Queen - Snow White, Queen / Mirror, Queen - Huntsan, Queen - Prince, Snow White + seven dwarfs, Snow White + Huntsman, Snow White + Prince	
-										
-										
-										
-										
-										
-samorastniki.txt	slovenian	Samorastniki	Lovro Kuhar	1937	13766	Gospodar	Ožbej, Hudabivška Meta	Ožbej, Hudabivška Meta, Karničnik, Gospodar, Oče, starka Nana	Ožbej + Hudabivška Meta, Oče - Ožbej, Gospodar - Hudabivška Meta	
+snow_white.txt	english	Little Snow-White	Jacob and Wilhelm Grimm	1812	1907	Queen	Snow White	Snow White, Queen, Mirror, seven dwarfs, Huntsman, Prince	Queen - Snow White, Queen / Mirror, Queen - Huntsan, Queen - Prince, Snow White + seven dwarfs, Snow White + Huntsman, Snow White + Prince, Vile + Kralj, Vile + Kraljica, Vile + Trnuljčica **a tle si ponesreči pastal od trnjulčice?*	
+romeo_and_juliet.txt	english	Romeo and Juliet	William Shakespeare	1597	25672	Capulet family, Montague family	Romeo Montague	Romeo/Romeo Montague, Juliet/Juliet Capulet, Lord Capulet, Lady Capulet, Tybalt, Montague Family	Romeo + Juliet, Montague Family - Capulet Family, Montague Family - Juliet, Capulet Family - Romeo, Romeo - Tybalt	
+the_lord_of_the_rings.txt	english	The Lord Of The Rings: The Fellowship of the Ring	John Ronald Reuel Tolkien	1954	187813	Sauron	Frodo Baggins			
+gatsby.txt	english	The Great Gatsby	Francis Scott Key Fitzgerald	1925	48189	Tom Buchanan	Jay Gatsby			
+anna_karenina.txt	english	Anna Karenina	Leo Tolstoy	1878	349736	Karenin	Anna Karenina			
+samorastniki.txt	slovenian	Samorastniki	Lovro Kuhar	1937	13766	Gospodar	Ožbej, Hudabivška Meta	Ožbej, Hudabivška Meta, Karničnik/Gospodar/Oče, starka Nana	Ožbej + Hudabivška Meta, Oče - Ožbej, Gospodar - Hudabivška Meta	
 matkova_tina.txt	slovenian	Matkova Tina	Ivan Pregelj	1922	4536	?	Tina	Tina, Matko		
-	slovenian	Peter Klepec								
-		Bratovščina sinjega galeba								
+miklova_zala.txt	slovenian	Miklova Zala	Jakob Sket	2005	35372					
+martin_kacur.txt	slovenian	Martin Kačur	Ivan Cankar	2005	40754					
+butalci.txt	slovenian	Butalci	Fran Miličinski	2005	15748					
 										
-DEJTA TEXT FILE V: https://drive.google.com/drive/folders/1ofJP_AEVSyvQQhQODcUgaGB6MDrvTuUe?usp=sharing										
+										
+										
+										
+	DEJTA TEXT FILE V: https://drive.google.com/drive/folders/1ofJP_AEVSyvQQhQODcUgaGB6MDrvTuUe?usp=sharing									
