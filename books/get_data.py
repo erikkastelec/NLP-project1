@@ -119,3 +119,4 @@ def get_data(file_path, get_text=False):
 
 if __name__ == '__main__':
     data = get_data(FILE_PATH, get_text=True)
+    print(data)
