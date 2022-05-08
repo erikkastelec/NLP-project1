@@ -90,7 +90,7 @@ def create_graph_from_pairs_sentiment(pairs):
 
 def get_relations_from_sentences(data: Document, ner_mapper: dict):
     """
-    Find pairs of entities, which co-occurre in the same sentence.
+    Find pairs of entities, which co-occur in the same sentence.
     Returns:
         list of entity verb entity pairs
         TODO: verb extraction -> None for now
@@ -111,9 +111,9 @@ def get_relations_from_sentences(data: Document, ner_mapper: dict):
 
 def get_relations_from_sentences_sentiment(data: Document, ner_mapper: dict, sa: SentimentAnalysis):
     """
-    Find pairs of entities, which co-occurre in the same sentence.
+    Find pairs of entities, which co-occur in the same sentence and attach sentiment.
     Returns:
-        list of entity verb entity pairs
+        list of entity verb entity sentiment pairs
         TODO: verb extraction -> None for now
     """
     pairs = []
