@@ -16,7 +16,7 @@ from simstring.searcher import Searcher
 
 from ECKG.src.eventify import Eventify
 from books.get_data import get_data
-
+from sentiment.sentiment_analysis import SentimentAnalysis
 
 def map_text(text, mapper):
     distinct_entities = set()
@@ -72,6 +72,21 @@ def create_graph_from_pairs(pairs):
 
     return GG
 
+def create_graph_from_pairs_sentiment(pairs):
+    MG = nx.MultiGraph()
+    MG.add_weighted_edges_from([(x, y, s) for x, _, y, s in pairs])
+    # MG.degree(weight='weight')
+
+    # Convert MultiGraph to Graph
+    GG = nx.Graph()
+    for n, nbrs in MG.adjacency():
+        for nbr, edict in nbrs.items():
+            value = len(edict.values())
+            GG.add_edge(n, nbr, weight=value)
+
+    return GG
+
+
 
 def get_relations_from_sentences(data: Document, ner_mapper: dict):
     """
@@ -89,6 +104,40 @@ def get_relations_from_sentences(data: Document, ner_mapper: dict):
             for x, y in combinations(curr_words, 2):
                 try:
                     pairs.append((ner_mapper[x], None, ner_mapper[y]))
+                except KeyError:
+                    print("WARNING")
+    return pairs
+
+
+def get_relations_from_sentences_sentiment(data: Document, ner_mapper: dict, sa: SentimentAnalysis):
+    """
+    Find pairs of entities, which co-occurre in the same sentence.
+    Returns:
+        list of entity verb entity pairs
+        TODO: verb extraction -> None for now
+    """
+    pairs = []
+    for i, sentence in enumerate(data.sentences):
+        if len(sentence.entities) > 1:
+            curr_words = []
+            for j, entity in enumerate(sentence.entities):
+                curr_words.append(" ".join(x.text for x in entity.words))
+            for x, y in combinations(curr_words, 2):
+                try:
+                    ner_x = ner_mapper[x]
+                    ner_y = ner_mapper[y]
+                    word_list = sentence.strip().split(' ')
+                    mask_list = []
+                    try:
+                        index_x = word_list.index(x)
+                        index_y = word_list.index(y)
+                        mask_list.append(index_x)
+                        mask_list.append(index_y)
+                    except ValueError:
+                        print("word not found")
+                    sentiment = sa.get_sentiment_sentence(word_list, mask_list)
+                    pairs.append((ner_x, None, ner_y, sentiment))
+
                 except KeyError:
                     print("WARNING")
     return pairs

@@ -128,4 +128,14 @@ def get_data(file_path, get_text=False):
 
 if __name__ == '__main__':
     data = get_data(FILE_PATH, get_text=True)
-    print("test")
+
+    slo_books = [d for d in data if d.language == 'slovenian']
+    eng_books = [d for d in data if d.language == 'english']
+
+    all_len = [d.num_words for d in data]
+    slo_len = [d.num_words for d in slo_books]
+    eng_len = [d.num_words for d in eng_books]
+
+    print("Slo books:", min(slo_len), max(slo_len), sum(slo_len) / len(slo_len))
+    print("Eng books:", min(eng_len), max(eng_len), sum(eng_len) / len(eng_len))
+    print("All books:", min(all_len), max(all_len), sum(all_len) / len(all_len))
