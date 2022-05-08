@@ -4,8 +4,36 @@ import stanza
 
 from ECKG.src.eventify import Eventify
 from ECKG.src.helper_functions import fix_ner, deduplicate_named_entities, get_relations_from_sentences, \
-    create_graph_from_pairs, graph_entity_importance_evaluation, get_entities_from_svo_triplets
+    create_graph_from_pairs, graph_entity_importance_evaluation, get_entities_from_svo_triplets, find_similar
 from books.get_data import get_data, Book
+
+
+def precision_at_k(actual, predicted, k):
+    act_set = set(actual)
+    pred_set = set(predicted[:k])
+    result = len(act_set & pred_set) / float(k)
+    return result
+
+
+def ranking_metric(book: Book, predictions):
+    actual = []
+    for character in book.characters:
+        predicted = False
+        for sinonim in character.sinonims:
+            og_sinonim = sinonim
+            sinonim = find_similar(sinonim, predictions, similarity=80)
+            if sinonim is not None:
+                predicted = True
+                actual.append(sinonim)
+                break
+        if not predicted:
+            actual.append(og_sinonim)
+    res = 0
+    print(actual)
+    print(predictions)
+    for k in range(1, len(actual) + 1):
+        res += precision_at_k(actual, predictions, k)
+    return res / len(actual)
 
 
 def calculate_metrics(book: Book, predictions):
@@ -13,26 +41,28 @@ def calculate_metrics(book: Book, predictions):
     tp = 0
     fp = 0
     fn = 0
-    true = []
+    actual = []
 
     for character in book.characters:
         predicted = False
         for sinonim in character.sinonims:
-            sinonim = sinonim.lower()
-            if sinonim in predictions:
+            sinonim = find_similar(sinonim, predictions, similarity=80)
+            if sinonim is not None:
                 predicted = True
                 tp += 1
-                true.append(sinonim)
+                actual.append(sinonim)
+                break
         if not predicted:
             fn += 1
     for prediction in predictions:
-        if prediction not in true:
+        if prediction not in actual:
             fp += 1
 
     precision = tp / (tp + fp)
     recall = tp / (tp + fn)
     f1 = tp / (tp + ((fp + fn) / 2))
 
+    # mAP
     return precision, recall, f1
 
 
@@ -73,6 +103,7 @@ def evaluate_book(book: Book, pipeline, svo_extractor, cutoff=0.9, verbose=False
     p.append(metrics1[0])
     r.append(metrics1[1])
     f.append(metrics1[2])
+    metrics1 = (metrics1[0], metrics1[1], metrics1[2], ranking_metric(book, names))
     if verbose:
         print("Results for importance ranking based on number of occurences in the text")
         print_metrics(metrics1)
@@ -90,6 +121,8 @@ def evaluate_book(book: Book, pipeline, svo_extractor, cutoff=0.9, verbose=False
 
     # [print((x, y)) for x, y in zip(names, values)]
     metrics2 = calculate_metrics(book, names)
+    metrics2 = (metrics2[0], metrics2[1], metrics2[2], ranking_metric(book, names))
+
     if verbose:
         print("Results for importance ranking based on network centralities, where graph is constructed from entity "
               "co-occurrences in the same sentence")
@@ -104,6 +137,8 @@ def evaluate_book(book: Book, pipeline, svo_extractor, cutoff=0.9, verbose=False
     names, values = keep_top(names, values, cutoff=cutoff)
     # print(names)
     metrics3 = calculate_metrics(book, names)
+    metrics3 = (metrics3[0], metrics3[1], metrics3[2], ranking_metric(book, names))
+
     if verbose:
         print("Results for importance ranking based on network centralities, where graph is constructed from entity "
               "co-occurrences in the same SVO triplet")
@@ -131,29 +166,43 @@ def evaluate_all(corpus_path="../../books/corpus.tsv"):
 
 
 if __name__ == "__main__":
+    print(precision_at_k(["a", "b", "c"], ["b", "d", "c"], 2))
+
     corpus = get_data("../../books/corpus.tsv", get_text=True)
     sl_pipeline = classla.Pipeline("sl", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
     sl_e = Eventify(language="sl")
     slo_books = []
 
-    m1 = [[], [], []]
-    m2 = [[], [], []]
-    m3 = [[], [], []]
+    m1 = [[], [], [], []]
+    m2 = [[], [], [], []]
+    m3 = [[], [], [], []]
+    count = 0
     for book in corpus:
+        if count == 5:
+            break
         if book.language == "slovenian":
-            tmp1, tmp2, tmp3 = evaluate_book(book, sl_pipeline, sl_e, cutoff=0.8, verbose=False)
-            print(tmp1)
-            m1[0].append(tmp1[0])
-            m1[1].append(tmp1[1])
-            m1[2].append(tmp1[2])
-            m2[0].append(tmp2[0])
-            m2[1].append(tmp2[1])
-            m2[2].append(tmp2[2])
-            m3[0].append(tmp3[0])
-            m3[1].append(tmp3[1])
-            m3[2].append(tmp3[2])
+            try:
+                tmp1, tmp2, tmp3 = evaluate_book(book, sl_pipeline, sl_e, cutoff=0.8, verbose=False)
+                print(tmp1)
+                m1[0].append(tmp1[0])
+                m1[1].append(tmp1[1])
+                m1[2].append(tmp1[2])
+                m1[3].append(tmp1[3])
+                m2[0].append(tmp2[0])
+                m2[1].append(tmp2[1])
+                m2[2].append(tmp2[2])
+                m2[3].append(tmp2[3])
+                m3[0].append(tmp3[0])
+                m3[1].append(tmp3[1])
+                m3[2].append(tmp3[2])
+                m3[3].append(tmp3[3])
+                count += 1
+            except Exception as e:
+                print(e)
+
     for i, x in enumerate([m1, m2, m3]):
         print("Method ", str(i))
         print("Precision: ", str(sum(x[0]) / len(x[0])))
         print("Recall: ", str(sum(x[1]) / len(x[1])))
         print("F1 score: ", str(sum(x[2]) / len(x[2])))
+        print("Mean average precision: ", str(sum(x[3]) / len(x[3])))

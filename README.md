@@ -1,5 +1,9 @@
 # NLP-project1 (fk58d7avc9)
 
+### Corpus
+
+[Corpus](./books/)
+
 ### Entity co-occurrence knowledge graph (ECKG)
 
 [Python notebook](./ECKG/src/ECKG.ipynb) <br>
