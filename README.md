@@ -5,6 +5,10 @@
 [Python notebook](./ECKG/src/ECKG.ipynb) <br>
 [README](./ECKG/README.md)
 
+### Evaluation
+
+[evaluation.py](./ECKG/src/evaluation.py)
+
 ### Relationship extraction
 
 [Python notebook](./Relation_extracting/notebook.ipynb)
