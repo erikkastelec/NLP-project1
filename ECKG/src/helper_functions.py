@@ -22,6 +22,23 @@ def map_text(text, mapper):
     return text, distinct_entities
 
 
+def entity_importance_evaluation(G: nx.Graph, centrality_weights=None):
+    if centrality_weights is None:
+        centrality_weights = [0.2, 0.2, 0.2]
+    eigenvector_centrality = list(nx.eigenvector_centrality(G).values())
+    degree_centrality = list(nx.degree_centrality(G).values())
+    closeness_centrality = list(nx.closeness_centrality(G).values())
+    # betweeenness_centrality = list(nx.betweeenness_centrality(G).values)
+    centralities = [eigenvector_centrality, degree_centrality, closeness_centrality]
+
+    assert len(centralities) == len(centrality_weights)
+    res = [0 for _ in range(len(centralities[0]))]
+    for centrality, weight in zip(centralities, centrality_weights):
+        for i in range(len(centrality)):
+            res[i] += centrality[i] * weight
+    return res
+
+
 def is_similar_string(a, b, similarity=70):
     return fuzz.token_set_ratio(a, b) > similarity
 
