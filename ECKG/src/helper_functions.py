@@ -18,6 +18,7 @@ from ECKG.src.eventify import Eventify
 from books.get_data import get_data
 from sentiment.sentiment_analysis import SentimentAnalysis
 
+
 def map_text(text, mapper):
     distinct_entities = set()
 
@@ -31,11 +32,13 @@ def map_text(text, mapper):
 def graph_entity_importance_evaluation(G: nx.Graph, centrality_weights=None):
     if centrality_weights is None:
         centrality_weights = [0.33, 0.33, 0.33]
-    eigenvector_centrality = list(nx.eigenvector_centrality(G).values())
+        centrality_weights = [1]
+    eigenvector_centrality = list(nx.eigenvector_centrality(G, weight="weight").values())
     degree_centrality = list(nx.degree_centrality(G).values())
-    closeness_centrality = list(nx.closeness_centrality(G).values())
-    # betweeenness_centrality = list(nx.betweeenness_centrality(G).values)
+    closeness_centrality = list(nx.closeness_centrality(G, distance="weight").values())
+    betweenness_centrality = list(nx.betweenness_centrality(G, weight="weight").values())
     centralities = [eigenvector_centrality, degree_centrality, closeness_centrality]
+    centralities = [betweenness_centrality]
 
     assert len(centralities) == len(centrality_weights)
     res = [0 for _ in range(len(centralities[0]))]
@@ -68,7 +71,7 @@ def create_graph_from_pairs(pairs):
     for n, nbrs in MG.adjacency():
         for nbr, edict in nbrs.items():
             value = len(edict.values())
-            GG.add_edge(n, nbr, weight=value)
+            GG.add_edge(n, nbr, weight=1 / value)
 
     return GG
 

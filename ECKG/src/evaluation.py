@@ -29,8 +29,6 @@ def ranking_metric(book: Book, predictions):
         if not predicted:
             actual.append(og_sinonim)
     res = 0
-    print(actual)
-    print(predictions)
     for k in range(1, len(actual) + 1):
         res += precision_at_k(actual, predictions, k)
     return res / len(actual)
@@ -95,15 +93,19 @@ def evaluate_book(book: Book, pipeline, svo_extractor, cutoff=0.9, verbose=False
 
     # 1. IMPORTANCE BASED ON NUMBER OF OCCURRENCES IN THE TEXT
     count = dict(sorted(count.items(), key=lambda x: -x[1]))
-    # keep top 10%
-    names, values = keep_top(list(count.keys()), list(count.values()), cutoff=cutoff)
+    names = list(count.keys())
+    values = list(count.values())
+    cutoff_names, cutoff_values = keep_top(names, values, cutoff=cutoff)
+    print(cutoff_names)
     # for i in range(len(cutoff)):
     #     print(names[i] + ": " + str(cutoff[i]))
-    metrics1 = calculate_metrics(book, names)
-    p.append(metrics1[0])
-    r.append(metrics1[1])
-    f.append(metrics1[2])
-    metrics1 = (metrics1[0], metrics1[1], metrics1[2], ranking_metric(book, names))
+    metrics11 = calculate_metrics(book, cutoff_names)
+    metrics12 = calculate_metrics(book, names[0:len(book.characters)])
+    # p.append(metrics1[0])
+    # r.append(metrics1[1])
+    # f.append(metrics1[2])
+    metrics1 = (
+    metrics11[0], metrics11[1], metrics11[2], metrics12[0], metrics12[1], metrics12[2], ranking_metric(book, names))
     if verbose:
         print("Results for importance ranking based on number of occurences in the text")
         print_metrics(metrics1)
@@ -117,11 +119,17 @@ def evaluate_book(book: Book, pipeline, svo_extractor, cutoff=0.9, verbose=False
     sentence_relations = get_relations_from_sentences(data, deduplication_mapper)
     graph = create_graph_from_pairs(sentence_relations)
     names, values = graph_entity_importance_evaluation(graph)
-    names, values = keep_top(names, values, cutoff=cutoff)
 
+    cutoff_names, cutoff_values = keep_top(names, values, cutoff=cutoff)
+    print(cutoff_names)
+    # values = np.array(v2, dtype=np.float32)
+    # values = values[values > 0]
+    # names = n2[0:len(values)]
     # [print((x, y)) for x, y in zip(names, values)]
-    metrics2 = calculate_metrics(book, names)
-    metrics2 = (metrics2[0], metrics2[1], metrics2[2], ranking_metric(book, names))
+    metrics21 = calculate_metrics(book, cutoff_names)
+    metrics22 = calculate_metrics(book, names[0:len(book.characters)])
+    metrics2 = (
+    metrics21[0], metrics21[1], metrics21[2], metrics22[0], metrics22[1], metrics22[2], ranking_metric(book, names))
 
     if verbose:
         print("Results for importance ranking based on network centralities, where graph is constructed from entity "
@@ -134,10 +142,19 @@ def evaluate_book(book: Book, pipeline, svo_extractor, cutoff=0.9, verbose=False
     svo_triplet_graph = create_graph_from_pairs(entities_from_svo_triplets)
     names, values = graph_entity_importance_evaluation(svo_triplet_graph)
     # [print((x, y)) for x, y in zip(names, values)]
-    names, values = keep_top(names, values, cutoff=cutoff)
+    n3 = names
+    v3 = values
+    cutoff_names, cutoff_values = keep_top(names, values, cutoff=cutoff)
+    print(cutoff_names)
+    # values = np.array(v3, dtype=np.float32)
+    # values = values[values > 0]
+    # names = n3[0:len(values)]
     # print(names)
-    metrics3 = calculate_metrics(book, names)
-    metrics3 = (metrics3[0], metrics3[1], metrics3[2], ranking_metric(book, names))
+    print([[character.sinonims for character in book.characters]])
+    metrics31 = calculate_metrics(book, cutoff_names)
+    metrics32 = calculate_metrics(book, names[0:len(book.characters)])
+    metrics3 = (
+    metrics31[0], metrics31[1], metrics31[2], metrics32[0], metrics32[1], metrics32[2], ranking_metric(book, names))
 
     if verbose:
         print("Results for importance ranking based on network centralities, where graph is constructed from entity "
@@ -170,39 +187,45 @@ if __name__ == "__main__":
 
     corpus = get_data("../../books/corpus.tsv", get_text=True)
     sl_pipeline = classla.Pipeline("sl", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
+    # en_pipeline = stanza.Pipeline("en", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
     sl_e = Eventify(language="sl")
+    # en_e = Eventify(language="en")
     slo_books = []
 
-    m1 = [[], [], [], []]
-    m2 = [[], [], [], []]
-    m3 = [[], [], [], []]
+    m1 = [[] for _ in range(7)]
+    m2 = [[] for _ in range(7)]
+    m3 = [[] for _ in range(7)]
     count = 0
     for book in corpus:
         if count == 5:
             break
         if book.language == "slovenian":
             try:
-                tmp1, tmp2, tmp3 = evaluate_book(book, sl_pipeline, sl_e, cutoff=0.8, verbose=False)
-                print(tmp1)
-                m1[0].append(tmp1[0])
-                m1[1].append(tmp1[1])
-                m1[2].append(tmp1[2])
-                m1[3].append(tmp1[3])
-                m2[0].append(tmp2[0])
-                m2[1].append(tmp2[1])
-                m2[2].append(tmp2[2])
-                m2[3].append(tmp2[3])
-                m3[0].append(tmp3[0])
-                m3[1].append(tmp3[1])
-                m3[2].append(tmp3[2])
-                m3[3].append(tmp3[3])
+                res = evaluate_book(book, sl_pipeline, sl_e, cutoff=0.8, verbose=False)
+                for (x, y) in zip(res, [m1, m2, m3]):
+                    for i, z in enumerate(x):
+                        y[i].append(z)
+
+                count += 1
+            except Exception as e:
+                print(e)
+        elif book.language == "english":
+            continue
+            try:
+                res = evaluate_book(book, en_pipeline, en_e, cutoff=0.8, verbose=False)
+                for (x, y) in zip(res, [m1, m2, m3]):
+                    for i, z in enumerate(x):
+                        y[i].append(z)
                 count += 1
             except Exception as e:
                 print(e)
 
     for i, x in enumerate([m1, m2, m3]):
         print("Method ", str(i))
-        print("Precision: ", str(sum(x[0]) / len(x[0])))
-        print("Recall: ", str(sum(x[1]) / len(x[1])))
-        print("F1 score: ", str(sum(x[2]) / len(x[2])))
-        print("Mean average precision: ", str(sum(x[3]) / len(x[3])))
+        print("Precision 1: ", str(sum(x[0]) / len(x[0])))
+        print("Recall 1: ", str(sum(x[1]) / len(x[1])))
+        print("F1 score 1: ", str(sum(x[2]) / len(x[2])))
+        print("Precision 2: ", str(sum(x[3]) / len(x[3])))
+        print("Recall 2: ", str(sum(x[4]) / len(x[4])))
+        print("F1 score 2: ", str(sum(x[5]) / len(x[5])))
+        print("Mean average precision: ", str(sum(x[6]) / len(x[6])))
