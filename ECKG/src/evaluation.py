@@ -84,12 +84,12 @@ def evaluate_book(book: Book, pipeline, svo_extractor, cutoff=0.9, verbose=False
     data = fix_ner(data)
 
     # Run named entity deduplication/resolution
+    deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True)
     p = []
     r = []
     f = []
     # for cutoff in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
     #     print(cutoff)
-    deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True)
 
     # 1. IMPORTANCE BASED ON NUMBER OF OCCURRENCES IN THE TEXT
     count = dict(sorted(count.items(), key=lambda x: -x[1]))

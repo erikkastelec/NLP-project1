@@ -100,6 +100,7 @@ def get_relations_from_sentences(data: Document, ner_mapper: dict):
     """
     pairs = []
     for i, sentence in enumerate(data.sentences):
+
         if len(sentence.entities) > 1:
             curr_words = []
             for j, entity in enumerate(sentence.entities):
@@ -108,7 +109,10 @@ def get_relations_from_sentences(data: Document, ner_mapper: dict):
                 try:
                     pairs.append((ner_mapper[x], None, ner_mapper[y]))
                 except KeyError:
-                    print("WARNING")
+                    # entity is not type PER
+                    pass
+                    # print("WARNING")
+
     return pairs
 
 
@@ -149,18 +153,22 @@ def get_relations_from_sentences_sentiment(data: Document, ner_mapper: dict, sa:
 def fix_ner(data):
     """
     Fixes common problems with NER (detecting only ADJ and not noun after it)
+    Keeps only PER entities
     """
     data.entities = []
     for i, sentence in enumerate(data.sentences):
         if len(sentence.entities) != 0:
             for j, entity in enumerate(sentence.entities):
-                if len(entity.words) == 1:
-                    if entity.words[0].upos == "ADJ" and data.sentences[i].words[
-                        entity.words[0].head - 1].upos == "NOUN":
-                        data.sentences[i].entities[j].tokens.append(
-                            data.sentences[i].words[entity.words[0].head - 1].parent)
-                        data.sentences[i].entities[j].words.append(data.sentences[i].words[entity.words[0].head - 1])
-                data.entities.append(data.sentences[i].entities[j])
+                # Keep only PER entities
+                if entity.type == "PER":
+                    if len(entity.words) == 1:
+                        if entity.words[0].upos == "ADJ" and data.sentences[i].words[
+                            entity.words[0].head - 1].upos == "NOUN":
+                            data.sentences[i].entities[j].tokens.append(
+                                data.sentences[i].words[entity.words[0].head - 1].parent)
+                            data.sentences[i].entities[j].words.append(
+                                data.sentences[i].words[entity.words[0].head - 1])
+                    data.entities.append(data.sentences[i].entities[j])
     return data
 
 
