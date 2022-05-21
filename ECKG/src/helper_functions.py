@@ -3,7 +3,7 @@ import os
 import pickle
 from collections import Counter
 from itertools import combinations
-
+from collections import defaultdict
 import classla
 import networkx as nx
 from classla import Document
@@ -17,6 +17,8 @@ from simstring.searcher import Searcher
 from ECKG.src.eventify import Eventify
 from books.get_data import get_data
 from sentiment.sentiment_analysis import SentimentAnalysis
+from statistics import mean
+
 
 def map_text(text, mapper):
     distinct_entities = set()
@@ -31,11 +33,13 @@ def map_text(text, mapper):
 def graph_entity_importance_evaluation(G: nx.Graph, centrality_weights=None):
     if centrality_weights is None:
         centrality_weights = [0.33, 0.33, 0.33]
-    eigenvector_centrality = list(nx.eigenvector_centrality(G).values())
+        centrality_weights = [1]
+    eigenvector_centrality = list(nx.eigenvector_centrality(G, weight="weight").values())
     degree_centrality = list(nx.degree_centrality(G).values())
-    closeness_centrality = list(nx.closeness_centrality(G).values())
-    # betweeenness_centrality = list(nx.betweeenness_centrality(G).values)
+    closeness_centrality = list(nx.closeness_centrality(G, distance="weight").values())
+    betweenness_centrality = list(nx.betweenness_centrality(G, weight="weight").values())
     centralities = [eigenvector_centrality, degree_centrality, closeness_centrality]
+    centralities = [betweenness_centrality]
 
     assert len(centralities) == len(centrality_weights)
     res = [0 for _ in range(len(centralities[0]))]
@@ -68,23 +72,68 @@ def create_graph_from_pairs(pairs):
     for n, nbrs in MG.adjacency():
         for nbr, edict in nbrs.items():
             value = len(edict.values())
-            GG.add_edge(n, nbr, weight=value)
+            GG.add_edge(n, nbr, weight=1 / value)
 
     return GG
 
 def create_graph_from_pairs_sentiment(pairs):
     MG = nx.MultiGraph()
-    MG.add_weighted_edges_from([(x, y, s) for x, _, y, s in pairs])
-    # MG.degree(weight='weight')
+    MG.add_weighted_edges_from([(x, y, s) for (x, y), s in pairs])
+    return MG
 
-    # Convert MultiGraph to Graph
-    GG = nx.Graph()
-    for n, nbrs in MG.adjacency():
-        for nbr, edict in nbrs.items():
-            value = len(edict.values())
-            GG.add_edge(n, nbr, weight=value)
+def get_triads(g):
+    triads = []
+    for nodes in combinations(g.nodes, 3):
+        sub = g.subgraph(nodes)
+        n_edges = sub.number_of_edges()
+        if n_edges != 3:
+            continue
+        triads.append(sub)
 
-    return GG
+    return triads
+
+def evaluate_triads(triads):
+    triad_classes = {'t0': [], 't1': [], 't2': [], 't3': []}
+    t0s = defaultdict(int)
+    t1s = defaultdict(int)
+    t2s = defaultdict(int)
+    t3s = defaultdict(int)
+    for triad in triads:
+        pos = 0
+        neg = 0
+        p = defaultdict(int)
+        n = defaultdict(int)
+
+        for x, y, _ in list(triad.edges):
+            if triad.adj[x][y][0]['weight'] > 0:
+                pos += 1
+                p[x] += 1
+                p[y] += 1
+            else:
+                neg += 1
+                n[x] += 1
+                n[y] += 1
+
+        if pos == 3:
+            triad_classes['t3'].append(triad)
+            for n in triad.nodes():
+                t3s[n] += 1
+        elif neg == 3:
+            triad_classes['t0'].append(triad)
+            for n in triad.nodes():
+                t0s[n] += 1
+        elif pos == 2 and neg == 1:
+            triad_classes['t2'].append(triad)
+            x = list(p.keys())[list(p.values()).index(2)]
+            t2s[x] += 1
+        elif pos == 1 and neg == 2:
+            triad_classes['t1'].append(triad)
+            x = list(n.keys())[list(n.values()).index(2)]
+            t1s[x] += 1
+        else:
+            print('Unknown triad')
+
+    return triad_classes, (t0s, t1s, t2s, t3s)
 
 
 
@@ -97,6 +146,7 @@ def get_relations_from_sentences(data: Document, ner_mapper: dict):
     """
     pairs = []
     for i, sentence in enumerate(data.sentences):
+
         if len(sentence.entities) > 1:
             curr_words = []
             for j, entity in enumerate(sentence.entities):
@@ -105,7 +155,10 @@ def get_relations_from_sentences(data: Document, ner_mapper: dict):
                 try:
                     pairs.append((ner_mapper[x], None, ner_mapper[y]))
                 except KeyError:
-                    print("WARNING")
+                    # entity is not type PER
+                    pass
+                    # print("WARNING")
+
     return pairs
 
 
@@ -126,7 +179,7 @@ def get_relations_from_sentences_sentiment(data: Document, ner_mapper: dict, sa:
                 try:
                     ner_x = ner_mapper[x]
                     ner_y = ner_mapper[y]
-                    word_list = sentence.strip().split(' ')
+                    word_list = [word.lemma for word in sentence.words]
                     mask_list = []
                     try:
                         index_x = word_list.index(x)
@@ -136,28 +189,61 @@ def get_relations_from_sentences_sentiment(data: Document, ner_mapper: dict, sa:
                     except ValueError:
                         print("word not found")
                     sentiment = sa.get_sentiment_sentence(word_list, mask_list)
-                    pairs.append((ner_x, None, ner_y, sentiment))
+                    pairs.append((ner_x, sentiment, ner_y))
 
                 except KeyError:
                     print("WARNING")
     return pairs
 
 
+def group_relations_filter(pairs, keep):
+    relations = defaultdict(list)
+    for x, s, y in pairs:
+        if x in keep and y in keep and s != 0 and x != y:
+            if x < y:
+                key = (x, y)
+            else:
+                key = (y, x)
+
+            relations[key].append(s)
+
+    final_rel = [(k, mean(v)) for k, v in relations.items()]
+    return final_rel
+
+
+def group_relations(pairs):
+    relations = defaultdict(list)
+    for x, s, y in pairs:
+        if s != 0 and x != y:
+            if x < y:
+                key = (x, y)
+            else:
+                key = (y, x)
+
+            relations[key].append(s)
+    final_rel = [(k, mean(v)) for k, v in relations.items()]
+    return final_rel
+
+
 def fix_ner(data):
     """
     Fixes common problems with NER (detecting only ADJ and not noun after it)
+    Keeps only PER entities
     """
     data.entities = []
     for i, sentence in enumerate(data.sentences):
         if len(sentence.entities) != 0:
             for j, entity in enumerate(sentence.entities):
-                if len(entity.words) == 1:
-                    if entity.words[0].upos == "ADJ" and data.sentences[i].words[
-                        entity.words[0].head - 1].upos == "NOUN":
-                        data.sentences[i].entities[j].tokens.append(
-                            data.sentences[i].words[entity.words[0].head - 1].parent)
-                        data.sentences[i].entities[j].words.append(data.sentences[i].words[entity.words[0].head - 1])
-                data.entities.append(data.sentences[i].entities[j])
+                # Keep only PER entities
+                if entity.type == "PER":
+                    if len(entity.words) == 1:
+                        if entity.words[0].upos == "ADJ" and data.sentences[i].words[
+                            entity.words[0].head - 1].upos == "NOUN":
+                            data.sentences[i].entities[j].tokens.append(
+                                data.sentences[i].words[entity.words[0].head - 1].parent)
+                            data.sentences[i].entities[j].words.append(
+                                data.sentences[i].words[entity.words[0].head - 1])
+                    data.entities.append(data.sentences[i].entities[j])
     return data
 
 
@@ -300,6 +386,49 @@ def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper):
         NER_containing_events.append((deduplication_mapper[s], v, deduplication_mapper[o]))
 
     return NER_containing_events
+
+
+def get_entities_from_svo_triplets_sentiment(book, e: Eventify, deduplication_mapper,  sa: SentimentAnalysis):
+    dedup_keys = deduplication_mapper.keys()
+    events = e.eventify(book.text)
+    NER_containing_events = []
+    relations = []
+    event_entity_count = {}
+    event_entities = []
+    event_tmp = []
+    for s, v, o in events:
+        if isinstance(s, tuple) or isinstance(o, tuple):
+            continue
+        s_sim = find_similar(s, dedup_keys)
+        o_sim = find_similar(o, dedup_keys)
+        if s_sim is not None and o_sim is not None:
+            s = deduplication_mapper[s_sim]
+            o = deduplication_mapper[o_sim]
+            NER_containing_events.append((s, v, o))
+            sentiment = sa.get_sentiment_word(v)
+            relations.append((deduplication_mapper[s], sentiment, deduplication_mapper[o]))
+
+        elif s != '<|EMPTY|>' and o != '<|EMPTY|>' and len(s.split()) < 3 and len(o.split()) < 3 and (
+                s_sim is not None or o_sim is not None):
+            event_entities.append(o)
+            event_entities.append(s)
+            try:
+                event_entity_count[s] += 1
+            except KeyError:
+                event_entity_count[s] = 1
+            try:
+                event_entity_count[o] += 1
+            except KeyError:
+                event_entity_count[o] = 1
+            # event_tmp.append((s, v, o))
+
+    deduplication_mapper, count = deduplicate_named_entities(event_entities, count_entities=True)
+    for s, v, o in event_tmp:
+        NER_containing_events.append((deduplication_mapper[s], v, deduplication_mapper[o]))
+        sentiment = sa.get_sentiment_word(v)
+        relations.append((deduplication_mapper[s], sentiment, deduplication_mapper[o]))
+
+    return NER_containing_events, relations
 
 def remove_from_list(list, unwanted_indexes):
     """
