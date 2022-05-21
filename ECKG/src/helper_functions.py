@@ -34,7 +34,8 @@ def graph_entity_importance_evaluation(G: nx.Graph, centrality_weights=None):
     if centrality_weights is None:
         centrality_weights = [0.33, 0.33, 0.33]
         centrality_weights = [1]
-    eigenvector_centrality = list(nx.eigenvector_centrality(G, weight="weight").values())
+    #eigenvector_centrality = list(nx.eigenvector_centrality(G, weight="weight").values())
+    eigenvector_centrality = []
     degree_centrality = list(nx.degree_centrality(G).values())
     closeness_centrality = list(nx.closeness_centrality(G, distance="weight").values())
     betweenness_centrality = list(nx.betweenness_centrality(G, weight="weight").values())
@@ -104,8 +105,16 @@ def evaluate_triads(triads):
         p = defaultdict(int)
         n = defaultdict(int)
 
-        for x, y, _ in list(triad.edges):
-            if triad.adj[x][y][0]['weight'] > 0:
+        for z in list(triad.edges):
+            x = z[0]
+            y = z[1]
+
+            try:
+                weight = triad[x][y][0]['weight']
+            except KeyError:
+                weight = triad.adj[x][y]['weight']
+
+            if weight > 0:
                 pos += 1
                 p[x] += 1
                 p[y] += 1
