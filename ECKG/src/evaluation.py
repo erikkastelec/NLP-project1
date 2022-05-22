@@ -186,10 +186,10 @@ if __name__ == "__main__":
     print(precision_at_k(["a", "b", "c"], ["b", "d", "c"], 2))
 
     corpus = get_data("../../books/corpus.tsv", get_text=True)
-    sl_pipeline = classla.Pipeline("sl", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
-    # en_pipeline = stanza.Pipeline("en", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
-    sl_e = Eventify(language="sl")
-    # en_e = Eventify(language="en")
+    # sl_pipeline = classla.Pipeline("sl", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
+    en_pipeline = stanza.Pipeline("en", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
+    # sl_e = Eventify(language="sl")
+    en_e = Eventify(language="en")
     slo_books = []
 
     m1 = [[] for _ in range(7)]
@@ -201,6 +201,7 @@ if __name__ == "__main__":
             break
         if book.language == "slovenian":
             try:
+                continue
                 res = evaluate_book(book, sl_pipeline, sl_e, cutoff=0.8, verbose=False)
                 for (x, y) in zip(res, [m1, m2, m3]):
                     for i, z in enumerate(x):
@@ -210,7 +211,7 @@ if __name__ == "__main__":
             except Exception as e:
                 print(e)
         elif book.language == "english":
-            continue
+            #continue
             try:
                 res = evaluate_book(book, en_pipeline, en_e, cutoff=0.8, verbose=False)
                 for (x, y) in zip(res, [m1, m2, m3]):

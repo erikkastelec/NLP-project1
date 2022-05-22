@@ -2,8 +2,10 @@ import errno
 import os
 import pickle
 from collections import Counter
-from itertools import combinations
 from collections import defaultdict
+from itertools import combinations
+from statistics import mean
+
 import classla
 import networkx as nx
 from classla import Document
@@ -17,7 +19,6 @@ from simstring.searcher import Searcher
 from ECKG.src.eventify import Eventify
 from books.get_data import get_data
 from sentiment.sentiment_analysis import SentimentAnalysis
-from statistics import mean
 
 
 def map_text(text, mapper):
@@ -201,7 +202,7 @@ def get_relations_from_sentences_sentiment(data: Document, ner_mapper: dict, sa:
                     pairs.append((ner_x, sentiment, ner_y))
 
                 except KeyError:
-                    print("WARNING")
+                    pass
     return pairs
 
 
@@ -244,7 +245,7 @@ def fix_ner(data):
         if len(sentence.entities) != 0:
             for j, entity in enumerate(sentence.entities):
                 # Keep only PER entities
-                if entity.type == "PER":
+                if entity.type == "PER" or entity.type == "PERSON":
                     if len(entity.words) == 1:
                         if entity.words[0].upos == "ADJ" and data.sentences[i].words[
                             entity.words[0].head - 1].upos == "NOUN":
