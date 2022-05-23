@@ -8,6 +8,8 @@ from statistics import mean
 
 import classla
 import networkx as nx
+import numpy as np
+import spacy
 from classla import Document
 from fuzzywuzzy import fuzz
 from fuzzywuzzy.process import extract
@@ -19,6 +21,81 @@ from simstring.searcher import Searcher
 from ECKG.src.eventify import Eventify
 from books.get_data import get_data
 from sentiment.sentiment_analysis import SentimentAnalysis
+
+
+def list_to_string(l):
+    s = ""
+    try:
+        s = l[0]
+    except IndexError:
+        return ""
+    for x in range(1, len(l)):
+        try:
+            s += " " + l[x]
+        except TypeError:
+            print("hello")
+    return s
+
+
+class English_coref_pipeline:
+    def __init__(self):
+        nlp = spacy.load("en_core_web_trf")
+        nlp.add_pipe('coreferee')
+        self.pipeline = nlp
+        self.rules_analyzer = nlp.get_pipe('coreferee').annotator.rules_analyzer
+
+    def unify_naming_coreferee(self, doc, deduplication_mapper):
+        dedup_keys = deduplication_mapper.keys()
+        disregard_list = ["man", "woman", "name", ]
+        chains = doc._.coref_chains
+        named_entity_chains = {}
+        new_chains = {}
+        # (spacy word, count)
+        new_chains_words = {}
+
+        for chain in chains:
+            if len(chain.mentions[chain.most_specific_mention_index]) == 1:
+                word = doc[chain.mentions[chain.most_specific_mention_index].root_index]
+                name = list_to_string([x.text for x in self.rules_analyzer.get_propn_subtree(word)])
+                if isinstance(name, str) and name == "":
+                    name = list_to_string(
+                        [doc[x].text for x in chain.mentions[chain.most_specific_mention_index].token_indexes])
+
+                similar = find_similar(name, dedup_keys, similarity=80)
+                if similar:
+                    try:
+                        named_entity_chains[similar] = named_entity_chains[similar] + flatten_list(chain.mentions)
+                    except KeyError:
+                        named_entity_chains[similar] = flatten_list(chain.mentions)
+                else:
+
+                    if word.tag_ == "NN" and word.text not in disregard_list:
+                        try:
+                            new_chains_words[name] = (new_chains_words[name][0], new_chains_words[name][1] + 1)
+                            new_chains[name] = new_chains[name] + flatten_list(chain.mentions)
+                        except KeyError:
+                            print(name)
+                            new_chains_words[name] = (word, 1)
+                            new_chains[name] = flatten_list(chain.mentions)
+
+        # sort dict
+        new_chains_words = dict(sorted(new_chains_words.items(), key=lambda x: -x[1][1]))
+        # Keep only top 10% new ones
+        new_chains_words = keep_top_dict(new_chains_words)
+        for key, value in new_chains_words.items():
+            new_chains_words[key] = (value[0], new_chains[key])
+        return named_entity_chains, new_chains_words
+
+
+def keep_top_dict(d, cutoff=0.9):
+    names = list(d.keys())
+    values_og = list(d.values())
+    values = [x[1] for x in values_og]
+    values = np.array(values)
+    values = values[values > np.quantile(values, cutoff)].tolist()
+    names = names[0:len(values)]
+    values = values_og[0:len(values)]
+    return {k: v for k, v in zip(names, values)}
 
 
 def map_text(text, mapper):
@@ -267,6 +344,7 @@ def flatten_list(l):
     return [j for i in l for j in i]
 
 
+
 def fix_ner(data):
     """
     Fixes common problems with NER (detecting only ADJ and not noun after it)
@@ -279,41 +357,40 @@ def fix_ner(data):
 
     for i, sentence in enumerate(data.sentences):
         delete_list = []
-        # start_char = None
-        # word_text = None
-        # sentence_len = len(sentence.words)
-        # ents = [ent.text for ent in sentence.entities]
-        # for j, word in enumerate(sentence.words):
-        #     # if word.text == "house" or word.text == "father":
-        #     #     print("hello")
-        #     if start_char:
-        #         if sentence_len < j + 1 or not noun_criterium(sentence.words[j + 1]):
-        #             data.entities.append({
-        #                 "text": word_text + " " + word.text,
-        #                 "type": "PERSON",
-        #                 "start_char": start_char,
-        #                 "end_char": word.end_char
-        #             })
-        #             word_text = None
-        #             start_char = None
-        #     else:
-        #         if word.text == "Cap":
-        #             print("hello")
-        #         if noun_criterium(word):
-        #             if sentence_len >= (j + 1) and noun_criterium(sentence.words[j + 1]):
-        #                 start_char = word.start_char
-        #                 word_text = word.text
-        #             else:
-        #                 if word.text == "Red":
-        #                     print("hello")
-        #                 start_char = None
-        #                 word_text = None
+        #     start_char = None
+        #     word_text = None
+        #     sentence_len = len(sentence.words)
+        #     ents = [ent.text for ent in sentence.entities]
+        #     for j, word in enumerate(sentence.words):
+        #         # if word.text == "house" or word.text == "father":
+        #         #     print("hello")
+        #         if start_char:
+        #             if sentence_len <= j + 1 or not noun_criterium(sentence.words[j + 1]):
         #                 data.entities.append({
-        #                     "text": word.text,
+        #                     "text": word_text + " " + word.text,
         #                     "type": "PERSON",
-        #                     "start_char": word.start_char,
+        #                     "start_char": start_char,
         #                     "end_char": word.end_char
         #                 })
+        #                 word_text = None
+        #                 start_char = None
+        #         else:
+        #             if noun_criterium(word):
+        #                 try:
+        #                     if sentence_len > (j + 1) and noun_criterium(sentence.words[j + 1]):
+        #                         start_char = word.start_char
+        #                         word_text = word.text
+        #                     else:
+        #                         start_char = None
+        #                         word_text = None
+        #                         data.entities.append({
+        #                             "text": word.text,
+        #                             "type": "PERSON",
+        #                             "start_char": word.start_char,
+        #                             "end_char": word.end_char
+        #                         })
+        #                 except IndexError:
+        #                     print("hello")
 
         if len(sentence.entities) != 0:
             for j, entity in enumerate(sentence.entities):
@@ -471,7 +548,7 @@ def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper):
                 event_entity_count[o] += 1
             except KeyError:
                 event_entity_count[o] = 1
-            event_tmp.append((s, v, o))
+            # event_tmp.append((s, v, o))
 
     deduplication_mapper, count = deduplicate_named_entities(event_entities, count_entities=True)
     for s, v, o in event_tmp:
