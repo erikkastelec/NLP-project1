@@ -1,0 +1,17 @@
+Database: senticoref
+
+Test scores:
+MUC:      prec=0.913, rec=0.476, f1=0.611
+BCubed:   prec=0.965, rec=0.571, f1=0.703
+CEAFe:    prec=0.460, rec=0.825, f1=0.575
+CoNLL-12: prec=0.779, rec=0.624, f1=0.630
+Test scores for All-in-one model:
+MUC:      prec=0.641, rec=1.000, f1=0.770
+BCubed:   prec=0.135, rec=1.000, f1=0.231
+CEAFe:    prec=0.384, rec=0.027, f1=0.050
+CoNLL-12: prec=0.387, rec=0.676, f1=0.350
+Test scores for Each-in-own model:
+MUC:      prec=0.000, rec=0.000, f1=0.000
+BCubed:   prec=1.000, rec=0.372, f1=0.525
+CEAFe:    prec=0.279, rec=0.713, f1=0.389
+CoNLL-12: prec=0.426, rec=0.362, f1=0.305

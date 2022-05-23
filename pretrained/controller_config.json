@@ -1,0 +1,6 @@
+{
+    "in_features": 10,
+    "dataset_name": "senticoref",
+    "model_name": "bert_trained",
+    "learning_rate": 0.05
+}
