@@ -310,6 +310,58 @@ def get_relations_from_sentences_sentiment(data: Document, ner_mapper: dict, sa:
                     pass
     return pairs
 
+def get_relations_from_sentences_sentiment_verb(data: Document, ner_mapper: dict, sa: SentimentAnalysis):
+    """
+    Find pairs of entities, which co-occur in the same sentence and attach sentiment.
+    Returns:
+        list of entity verb entity sentiment pairs
+        TODO: verb extraction -> None for now
+    """
+    pairs = []
+    for i, sentence in enumerate(data.sentences):
+
+        if len(sentence.entities) > 1:
+            curr_words = []
+            verbs = []
+            for j, entity in enumerate(sentence.entities):
+                curr_words.append(entity)
+            for w in sentence.words:
+                if w.upos == "VERB":
+                    verbs.append((w.text, w.id))
+            for x, y in combinations(curr_words, 2):
+                try:
+                    appended = False
+                    x_heads = []
+                    for w in x.words:
+                        if sentence.words[w.head - 1].upos == "VERB":
+                            x_heads.append(w.head)
+                    for w in y.words:
+                        if w.head in x_heads:
+                            appended = True
+                            verb = sentence.words[w.head - 1].text
+                            sentiment = sa.get_sentiment_word(verb)
+                            pairs.append((ner_mapper[entity_text_string(x)], sentiment,
+                                          ner_mapper[entity_text_string(y)]))
+                    if not appended:
+                        word_list = [word.lemma for word in sentence.words]
+                        mask_list = []
+                        try:
+                            index_x = word_list.index(x)
+                            index_y = word_list.index(y)
+                            mask_list.append(index_x)
+                            mask_list.append(index_y)
+                        except ValueError:
+                            #print("word not found")
+                            pass
+                        sentiment = sa.get_sentiment_sentence(word_list, mask_list)
+                        pairs.append((ner_mapper[entity_text_string(x)], sentiment, ner_mapper[entity_text_string(y)]))
+                except KeyError:
+                    # entity is not type PER
+                    pass
+                    # print("WARNING")
+
+    return pairs
+
 
 def group_relations_filter(pairs, keep):
     relations = defaultdict(list)

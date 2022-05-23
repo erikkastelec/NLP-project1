@@ -1,13 +1,12 @@
 import classla
 import numpy as np
 import stanza
-from networkx.algorithms.triads import triads_by_type
 import pickle
 
 from ECKG.src.eventify import Eventify
 from ECKG.src.helper_functions import fix_ner, deduplicate_named_entities, get_relations_from_sentences, \
     create_graph_from_pairs, graph_entity_importance_evaluation, get_entities_from_svo_triplets, find_similar, \
-    get_relations_from_sentences_sentiment, group_relations_filter, create_graph_from_pairs_sentiment, group_relations, \
+    get_relations_from_sentences_sentiment, get_relations_from_sentences_sentiment_verb, group_relations_filter, create_graph_from_pairs_sentiment, group_relations, \
     get_triads, evaluate_triads, get_entities_from_svo_triplets_sentiment
 from books.get_data import get_data, Book
 from ECKG.src.character import Character
@@ -20,7 +19,8 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 
-from sklearn.datasets import load_breast_cancer
+import networkx as nx
+import matplotlib.pyplot as plt
 
 
 
@@ -58,7 +58,7 @@ def evaluate_prediction_book(book, characters, predictions_p, predictions_p_prob
         try:
             i = list(characters).index(protagonist)
         except ValueError:
-            print(f'{protagonist} not found in characters for book {book.title}')
+            print(f'P:{protagonist} not found in characters for book {book.title}')
             continue
         p = predictions_p[i]
         p_true.append(p)
@@ -69,7 +69,7 @@ def evaluate_prediction_book(book, characters, predictions_p, predictions_p_prob
         try:
             i = list(characters).index(antagonist)
         except ValueError:
-            print(f'{antagonist} not found in characters for book {book.title}')
+            print(f'A:{antagonist} not found in characters for book {book.title}')
             continue
         a = predictions_a[i]
         a_true.append(a)
@@ -116,7 +116,8 @@ def get_characters(sentiment_pairs, names, text):
         characters.append(c)
     return characters, relationship_graph
 
-def evaluate_book(book: Book, pipeline, sa):
+
+def evaluate_book(book: Book, pipeline, sa, verb=True):
     # Run text through pipeline
     data = pipeline(book.text)
     # Fix NER anomalies
@@ -124,16 +125,19 @@ def evaluate_book(book: Book, pipeline, sa):
 
     deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True)
 
-    sentence_relations = get_relations_from_sentences_sentiment(data, deduplication_mapper, sa)
+    if verb:
+        sentence_relations = get_relations_from_sentences_sentiment_verb(data, deduplication_mapper, sa)
+    else:
+        sentence_relations = get_relations_from_sentences_sentiment(data, deduplication_mapper, sa)
     graph = create_graph_from_pairs(sentence_relations)
 
     if len(graph.nodes) == 0:
-        return [], []
+        return [], [], []
 
     names, values = graph_entity_importance_evaluation(graph)
     characters, relationship_graph = get_characters(sentence_relations, names, book.text)
 
-    return characters, relationship_graph
+    return characters, relationship_graph, deduplication_mapper
 
 
 def evaluate_book_svo(book: Book, pipeline, svo_extractor, sa):
@@ -182,29 +186,41 @@ def make_dataset(corpus):
     sl = []
     en = []
     both = []
+    graphs = []
+    n_mapper = []
 
     for book in corpus:
         if book.language == "slovenian":
-            characters, graph = evaluate_book(book, sl_pipeline, sa_kss)
+            characters, graph, ner_mapper = evaluate_book(book, sl_pipeline, sa_kss)
             sl.append(characters)
             both.append(characters)
+            graphs.append(graph)
+            n_mapper.append(ner_mapper)
         else:
-            characters, graph = evaluate_book(book, en_pipeline, sa_swn)
+            characters, graph, ner_mapper = evaluate_book(book, en_pipeline, sa_swn)
             en.append(characters)
             both.append(characters)
+            graphs.append(graph)
+            n_mapper.append(ner_mapper)
 
 
 
 
-    with open('characters_sl.pickle', 'wb') as f:
-        pickle.dump(sl, f, pickle.HIGHEST_PROTOCOL)
 
-    with open('characters_en.pickle', 'wb') as f:
-        pickle.dump(en, f, pickle.HIGHEST_PROTOCOL)
+    #with open('characters_sl.pickle', 'wb') as f:
+    #    pickle.dump(sl, f, pickle.HIGHEST_PROTOCOL)
+
+    #with open('characters_en.pickle', 'wb') as f:
+    #    pickle.dump(en, f, pickle.HIGHEST_PROTOCOL)
 
     with open('characters_all.pickle', 'wb') as f:
         pickle.dump(both, f, pickle.HIGHEST_PROTOCOL)
 
+    with open('graphs.pickle', 'wb') as f:
+        pickle.dump(graphs, f, pickle.HIGHEST_PROTOCOL)
+
+    with open('ner.pickle', 'wb') as f:
+        pickle.dump(n_mapper, f, pickle.HIGHEST_PROTOCOL)
 
     return sl, en, both
 
@@ -261,21 +277,26 @@ def shape_labels(corpus, characters_all):
 
     return labels
 
-def prune_books(corpus, characters_all):
+def prune_books(corpus, characters_all, graphs, ners):
     corpus_new = []
     characters_new = []
-
-    for book, characters in zip(corpus, characters_all):
+    graphs_new = []
+    ner_new = []
+    for book, characters, graph, ner in zip(corpus, characters_all, graphs, ners):
         if len(characters) > 0:
             corpus_new.append(book)
             characters_new.append(characters)
+            graphs_new.append(graph)
+            ner_new.append(ner)
 
-    return corpus_new, characters_new
+    return corpus_new, characters_new, graphs_new, ner_new
 
-def prune_characters(corpus, characters_all):
+def prune_characters(corpus, characters_all, graphs, ners):
     characters_new = []
     corpus_new = []
-    for book, characters in zip(corpus, characters_all):
+    graphs_new = []
+    ner_new = []
+    for book, characters, graph, ner in zip(corpus, characters_all, graphs, ners):
         characters_with_sinonims = [[character.name] + character.sinonims for character in book.characters]
         characters_with_sinonims = [item for sublist in characters_with_sinonims for item in sublist]
         n_char = []
@@ -285,7 +306,9 @@ def prune_characters(corpus, characters_all):
         if len(n_char) > 0:
             corpus_new.append(book)
             characters_new.append(n_char)
-    return corpus_new, characters_new
+            graphs_new.append(graph)
+            ner_new.append(ner)
+    return corpus_new, characters_new, graphs_new, ner_new
 
 def eval_all_books(corpus, characters, p_p, pp_p, p_a, pp_a):
     evals = []
@@ -295,30 +318,151 @@ def eval_all_books(corpus, characters, p_p, pp_p, p_a, pp_a):
     return evals
 
 
-if __name__ == '__main__':
-    data = load_breast_cancer()
-    X = data.data
-    Y = data.target
+def draw_network():
 
+    plt.show()
+
+def flatten(t):
+    return [item for sublist in t for item in sublist]
+
+def evaluate_relationships(relationships_gold, relationships, chars):
+    rl = []
+    for r in relationships:
+        if r[2] > 0:
+            rl.append((r[0], r[1], 'positive'))
+        elif r[2] == 0:
+            rl.append((r[0], r[1], 'neutral'))
+        else:
+            rl.append((r[0], r[1], 'negative'))
+
+    len_gold = len(relationships_gold)
+    len_pred = 0
+    correct = 0
+    false = 0
+    not_found = 0
+
+    for r in rl:
+        if r[0] in chars and r[1] in chars:
+            len_pred += 1
+            for g in relationships_gold:
+                if r[0] in g and r[1] in g:
+                    if r[2] == g[2]:
+                        correct += 1
+                    else:
+                        false += 1
+                else:
+                    not_found += 1
+
+    if len_pred == 0:
+        return None, None, None, None, len(relationships), len_gold
+
+
+    return correct/float(false+correct+not_found), correct/float(len_pred), correct, false, len_pred, len_gold
+
+def get_edgelist(graph):
+    edges = []
+    for edge in graph.edges():
+        edges.append((edge[0], edge[1], graph.get_edge_data(edge[0], edge[1])['weight']))
+    return edges
+
+def find_char_by_id(book, id):
+    for character in book.characters:
+        if character.id == id:
+            return character.name
+    return None
+
+def map_ner(relationships, ner_mapper):
+    res = []
+    for r in relationships:
+        if isinstance(r, str):
+            try:
+                x = ner_mapper[r]
+            except:
+                x = r
+            res.append(x)
+        else:
+            try:
+                x = ner_mapper[r[0]]
+            except:
+                x = r[0]
+
+            try:
+                y = ner_mapper[r[1]]
+            except:
+                y = r[1]
+            res.append((x, y, r[2]))
+    return res
+
+if __name__ == '__main__':
     corpus_full = get_data("../../books/corpus.tsv", get_text=True)
     corpus_slo = [book for book in corpus_full if book.language == "slovenian"]
     corpus_eng = [book for book in corpus_full if book.language != "slovenian"]
 
     #make_dataset(corpus_full)
-
+    #exit(0)
 
     with open('characters_all.pickle', 'rb') as f:
         data_set = pickle.load(f)
 
-    corpus = corpus_slo
+    with open('graphs.pickle', 'rb') as f:
+        graphs = pickle.load(f)
 
-    corpus, characters = prune_books(corpus, data_set)
-    corpus, characters = prune_characters(corpus, characters)
+    with open('ner.pickle', 'rb') as f:
+        ners = pickle.load(f)
+
+    corpus = corpus_full
+
+    corpus, characters_x, graphs, ners = prune_books(corpus, data_set, graphs, ners)
+    corpus, characters, graphs, ners = prune_characters(corpus, characters_x, graphs, ners)
     labels = shape_labels(corpus, characters).T
     features = shape_features(characters)
     features_flat = np.array([item for sublist in features for item in sublist])
 
-    X_train, X_test, Y_train, Y_test = train_test_split(features_flat, labels, test_size=0.5, random_state=42)
+    mapped_rels = []
+    for book in corpus:
+        relationships_mapped = [(find_char_by_id(book, relation[0]), find_char_by_id(book, relation[1]), relation[2]) for relation in book.relations]
+        mapped_rels.append(relationships_mapped)
+
+    cc = [[x.name for x in c] for c in characters]
+    books = []
+    count = 0
+    i = 0
+    for ff, book, graph, mr, ner in zip(features, corpus, graphs, mapped_rels, ners):
+        x = {}
+        x['title'] = book.title
+        x['protagonists'] = book.protagonists_names
+        x['antagonists'] = book.antagonists_names
+        x['language'] = book.language
+        temp_char = map_ner([c.name for c in book.characters], ner)
+        x['relation_eval'] = evaluate_relationships(map_ner(mr, ner), map_ner(get_edgelist(nx.Graph(graph)), ner), temp_char)
+        x['gold_relations'] = mr
+        x['graph'] = get_edgelist(nx.Graph(graph))
+        x['features'] = ff
+        x['true_labels'] = labels[count:count+len(ff)]
+        t = []
+        for j, f in enumerate(ff):
+            t.append(list(f)+list(labels[count+j]))
+        x['both'] = t
+        x['ner_mapper'] = ner
+
+        count += len(ff)
+        i += 1
+        books.append(x)
+
+    #X_train, X_test, Y_train, Y_test = train_test_split(features_flat, labels, test_size=0.5, random_state=42)
+
+    ffs = [book['features'] for book in books]
+    lbs = [book['true_labels'] for book in books]
+
+    X_train, X_test, Y_train, Y_test = train_test_split(ffs, lbs, test_size=0.5, random_state=42)
+
+    books_test = [y[0][-1]for y in Y_test]
+    books_train = [y[0][-1] for y in Y_train]
+
+    X_train = np.array(flatten(X_train))
+    X_test = np.array(flatten(X_test))
+    Y_train = np.array(flatten(Y_train))
+    Y_test = np.array(flatten(Y_test))
 
     cf_a_dt, cf_a_rf, cf_a_knn, cf_a_svc = train_classifiers(X_train, X_test, Y_train[:, 0], Y_test[:, 0])
     cf_p_dt, cf_p_rf, cf_p_knn, cf_p_svc = train_classifiers(X_train, X_test, Y_train[:, 1], Y_test[:, 1])
@@ -330,12 +474,16 @@ if __name__ == '__main__':
 
     evals_test = eval_all_books(corpus_slo, Y_test[:, 3], p_p, pp_p, p_a, pp_a)
 
+    print('TEST:')
+    print(evals_test)
+
     p_a, pp_a = get_predictions(cf_a_svc, features_flat)
     p_p, pp_p = get_predictions(cf_p_svc, features_flat)
     p, pp = get_predictions(cf_svc, features_flat)
 
     evals_all = eval_all_books(corpus_slo, labels[:, 3], p_p, pp_p, p_a, pp_a)
 
-    #make_dataset()
+    print('ALL:')
+    print(evals_all)
 
-    pass
+    temp = np.concatenate((labels[:, 2:], np.reshape(p_p, (len(p_p), 1)), np.reshape(p_a, (len(p_a), 1))), axis=1)
