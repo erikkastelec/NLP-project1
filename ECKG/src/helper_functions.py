@@ -35,7 +35,7 @@ def graph_entity_importance_evaluation(G: nx.Graph, centrality_weights=None):
     if centrality_weights is None:
         centrality_weights = [0.33, 0.33, 0.33]
         centrality_weights = [1]
-    #eigenvector_centrality = list(nx.eigenvector_centrality(G, weight="weight").values())
+    # eigenvector_centrality = list(nx.eigenvector_centrality(G, weight="weight").values())
     eigenvector_centrality = []
     degree_centrality = list(nx.degree_centrality(G).values())
     closeness_centrality = list(nx.closeness_centrality(G, distance="weight").values())
@@ -58,9 +58,11 @@ def is_similar_string(a, b, similarity=70):
 
 def find_similar(a, l, similarity=70):
     res = extract(a, l, limit=1, scorer=fuzz.token_set_ratio)
-    if res[0][1] > 70:
-        return res[0][0]
-
+    try:
+        if res[0][1] > similarity:
+            return res[0][0]
+    except IndexError:
+        pass
     return None
 
 
@@ -78,10 +80,12 @@ def create_graph_from_pairs(pairs):
 
     return GG
 
+
 def create_graph_from_pairs_sentiment(pairs):
     MG = nx.MultiGraph()
     MG.add_weighted_edges_from([(x, y, s) for (x, y), s in pairs])
     return MG
+
 
 def get_triads(g):
     triads = []
@@ -93,6 +97,7 @@ def get_triads(g):
         triads.append(sub)
 
     return triads
+
 
 def evaluate_triads(triads):
     triad_classes = {'t0': [], 't1': [], 't2': [], 't3': []}
@@ -146,6 +151,9 @@ def evaluate_triads(triads):
     return triad_classes, (t0s, t1s, t2s, t3s)
 
 
+def entity_text_string(a):
+    return " ".join(x.text for x in a.words)
+
 
 def get_relations_from_sentences(data: Document, ner_mapper: dict):
     """
@@ -159,11 +167,31 @@ def get_relations_from_sentences(data: Document, ner_mapper: dict):
 
         if len(sentence.entities) > 1:
             curr_words = []
+            verbs = []
             for j, entity in enumerate(sentence.entities):
-                curr_words.append(" ".join(x.text for x in entity.words))
+                curr_words.append(entity)
+            for w in sentence.words:
+                if w.upos == "VERB":
+                    verbs.append((w.text, w.id))
             for x, y in combinations(curr_words, 2):
                 try:
-                    pairs.append((ner_mapper[x], None, ner_mapper[y]))
+                    appended = False
+                    # for verb in verbs:
+                    #     if min(x[1], y[1]) < verb[1] < max(x[1], y[1]):
+                    #         appended = True
+                    #         pairs.append((ner_mapper[x[0]], verb[0], ner_mapper[y[0]]))
+                    #         break
+                    x_heads = []
+                    for w in x.words:
+                        if sentence.words[w.head - 1].upos == "VERB":
+                            x_heads.append(w.head)
+                    for w in y.words:
+                        if w.head in x_heads:
+                            appended = True
+                            pairs.append((ner_mapper[entity_text_string(x)], sentence.words[w.head - 1].text,
+                                          ner_mapper[entity_text_string(y)]))
+                    if not appended:
+                        pairs.append((ner_mapper[entity_text_string(x)], None, ner_mapper[entity_text_string(y)]))
                 except KeyError:
                     # entity is not type PER
                     pass
@@ -235,25 +263,77 @@ def group_relations(pairs):
     return final_rel
 
 
+def flatten_list(l):
+    return [j for i in l for j in i]
+
+
 def fix_ner(data):
     """
     Fixes common problems with NER (detecting only ADJ and not noun after it)
     Keeps only PER entities
     """
     data.entities = []
+    noun_criterium = lambda word: word.xpos in ["NNP"] and word.text not in flatten_list(
+        [x.split(" ") for x in ents]) and len(
+        word.text) > 2
+
     for i, sentence in enumerate(data.sentences):
+        delete_list = []
+        # start_char = None
+        # word_text = None
+        # sentence_len = len(sentence.words)
+        # ents = [ent.text for ent in sentence.entities]
+        # for j, word in enumerate(sentence.words):
+        #     # if word.text == "house" or word.text == "father":
+        #     #     print("hello")
+        #     if start_char:
+        #         if sentence_len < j + 1 or not noun_criterium(sentence.words[j + 1]):
+        #             data.entities.append({
+        #                 "text": word_text + " " + word.text,
+        #                 "type": "PERSON",
+        #                 "start_char": start_char,
+        #                 "end_char": word.end_char
+        #             })
+        #             word_text = None
+        #             start_char = None
+        #     else:
+        #         if word.text == "Cap":
+        #             print("hello")
+        #         if noun_criterium(word):
+        #             if sentence_len >= (j + 1) and noun_criterium(sentence.words[j + 1]):
+        #                 start_char = word.start_char
+        #                 word_text = word.text
+        #             else:
+        #                 if word.text == "Red":
+        #                     print("hello")
+        #                 start_char = None
+        #                 word_text = None
+        #                 data.entities.append({
+        #                     "text": word.text,
+        #                     "type": "PERSON",
+        #                     "start_char": word.start_char,
+        #                     "end_char": word.end_char
+        #                 })
+
         if len(sentence.entities) != 0:
             for j, entity in enumerate(sentence.entities):
                 # Keep only PER entities
-                if entity.type == "PER" or entity.type == "PERSON":
+                if (entity.type == "PER" or entity.type == "PERSON") and "VERB" not in [x.upos for x in entity.words]:
                     if len(entity.words) == 1:
-                        if entity.words[0].upos == "ADJ" and data.sentences[i].words[
-                            entity.words[0].head - 1].upos == "NOUN":
+                        if (entity.words[0].upos == "ADJ" or entity.words[0].upos == "VERB") and \
+                                data.sentences[i].words[
+                                    entity.words[0].head - 1].upos == "NOUN":
                             data.sentences[i].entities[j].tokens.append(
                                 data.sentences[i].words[entity.words[0].head - 1].parent)
                             data.sentences[i].entities[j].words.append(
                                 data.sentences[i].words[entity.words[0].head - 1])
                     data.entities.append(data.sentences[i].entities[j])
+                else:
+                    delete_list.append(j)
+        if not len(delete_list) == 0:
+            for e in reversed(delete_list):
+                del data.sentences[i].entities[e]
+
     return data
 
 
@@ -293,6 +373,8 @@ def deduplicate_named_entities(data, map=True, count_entities=True):
             name = " ".join([x.text for x in entity.tokens])
         except Exception:
             name = entity
+            if isinstance(entity, dict):
+                name = entity["text"]
 
         # Try finding it in aliases
         try:
@@ -389,7 +471,7 @@ def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper):
                 event_entity_count[o] += 1
             except KeyError:
                 event_entity_count[o] = 1
-            # event_tmp.append((s, v, o))
+            event_tmp.append((s, v, o))
 
     deduplication_mapper, count = deduplicate_named_entities(event_entities, count_entities=True)
     for s, v, o in event_tmp:
@@ -398,7 +480,7 @@ def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper):
     return NER_containing_events
 
 
-def get_entities_from_svo_triplets_sentiment(book, e: Eventify, deduplication_mapper,  sa: SentimentAnalysis):
+def get_entities_from_svo_triplets_sentiment(book, e: Eventify, deduplication_mapper, sa: SentimentAnalysis):
     dedup_keys = deduplication_mapper.keys()
     events = e.eventify(book.text)
     NER_containing_events = []
@@ -439,6 +521,7 @@ def get_entities_from_svo_triplets_sentiment(book, e: Eventify, deduplication_ma
         relations.append((deduplication_mapper[s], sentiment, deduplication_mapper[o]))
 
     return NER_containing_events, relations
+
 
 def remove_from_list(list, unwanted_indexes):
     """

@@ -37,7 +37,6 @@ def ranking_metric(book: Book, predictions):
 def calculate_metrics(book: Book, predictions):
     predictions = list(map(lambda x: x.lower(), predictions))
     tp = 0
-    fp = 0
     fn = 0
     actual = []
 
@@ -52,19 +51,24 @@ def calculate_metrics(book: Book, predictions):
                 break
         if not predicted:
             fn += 1
-    for prediction in predictions:
-        if prediction not in actual:
-            fp += 1
-
-    precision = tp / (tp + fp)
-    recall = tp / (tp + fn)
-    f1 = tp / (tp + ((fp + fn) / 2))
-
+    # for prediction in predictions:
+    #     if prediction not in actual:
+    #         fp += 1
+    try:
+        precision = tp / len(predictions)
+        recall = tp / len(book.characters)
+        f1 = 2 * (precision * recall / (precision + recall))
+    except ZeroDivisionError:
+        precision = 0
+        recall = 0
+        f1 = 0
     # mAP
     return precision, recall, f1
 
 
 def keep_top(names: list, values: list, cutoff=0.9):
+    if len(names) < 10:
+        return names, values
     values = np.array(values)
     values = values[values > np.quantile(values, cutoff)].tolist()
     names = names[0:len(values)]
@@ -95,6 +99,8 @@ def evaluate_book(book: Book, pipeline, svo_extractor, cutoff=0.9, verbose=False
     count = dict(sorted(count.items(), key=lambda x: -x[1]))
     names = list(count.keys())
     values = list(count.values())
+    cutoff_names = names
+    cutoff_values = values
     cutoff_names, cutoff_values = keep_top(names, values, cutoff=cutoff)
     print(cutoff_names)
     # for i in range(len(cutoff)):
@@ -105,7 +111,7 @@ def evaluate_book(book: Book, pipeline, svo_extractor, cutoff=0.9, verbose=False
     # r.append(metrics1[1])
     # f.append(metrics1[2])
     metrics1 = (
-    metrics11[0], metrics11[1], metrics11[2], metrics12[0], metrics12[1], metrics12[2], ranking_metric(book, names))
+        metrics11[0], metrics11[1], metrics11[2], metrics12[0], metrics12[1], metrics12[2], ranking_metric(book, names))
     if verbose:
         print("Results for importance ranking based on number of occurences in the text")
         print_metrics(metrics1)
@@ -116,46 +122,58 @@ def evaluate_book(book: Book, pipeline, svo_extractor, cutoff=0.9, verbose=False
     # plt.legend()
     # plt.savefig("plot.png")
     # 2. IMPORTANCE BASED ON GRAPH CENTRALITIES, WHERE GRAPH IS CONSTRUCTED FROM ENTITY CO-OCCURRENCES IN THE SAME SENTENCE
-    sentence_relations = get_relations_from_sentences(data, deduplication_mapper)
-    graph = create_graph_from_pairs(sentence_relations)
-    names, values = graph_entity_importance_evaluation(graph)
+    try:
+        sentence_relations = get_relations_from_sentences(data, deduplication_mapper)
+        graph = create_graph_from_pairs(sentence_relations)
+        names, values = graph_entity_importance_evaluation(graph)
+        cutoff_names = names
+        cutoff_values = values
+        cutoff_names, cutoff_values = keep_top(names, values, cutoff=cutoff)
+        print(cutoff_names)
+        # values = np.array(v2, dtype=np.float32)
+        # values = values[values > 0]
+        # names = n2[0:len(values)]
+        # [print((x, y)) for x, y in zip(names, values)]
+        metrics21 = calculate_metrics(book, cutoff_names)
+        metrics22 = calculate_metrics(book, names[0:len(book.characters)])
+        metrics2 = (
+            metrics21[0], metrics21[1], metrics21[2], metrics22[0], metrics22[1], metrics22[2],
+            ranking_metric(book, names))
 
-    cutoff_names, cutoff_values = keep_top(names, values, cutoff=cutoff)
-    print(cutoff_names)
-    # values = np.array(v2, dtype=np.float32)
-    # values = values[values > 0]
-    # names = n2[0:len(values)]
-    # [print((x, y)) for x, y in zip(names, values)]
-    metrics21 = calculate_metrics(book, cutoff_names)
-    metrics22 = calculate_metrics(book, names[0:len(book.characters)])
-    metrics2 = (
-    metrics21[0], metrics21[1], metrics21[2], metrics22[0], metrics22[1], metrics22[2], ranking_metric(book, names))
-
-    if verbose:
-        print("Results for importance ranking based on network centralities, where graph is constructed from entity "
-              "co-occurrences in the same sentence")
-        print_metrics(metrics2)
+        if verbose:
+            print(
+                "Results for importance ranking based on network centralities, where graph is constructed from entity "
+                "co-occurrences in the same sentence")
+            print_metrics(metrics2)
+    except ValueError:
+        metrics2 = (0, 0, 0, 0, 0, 0, 0)
     # [print((x, y)) for y, x in sorted(zip(values, graph.nodes), reverse=True)]
 
     # 3. IMPORTANCE BASED ON GRAPH CENTRALITIES, WHERE GRAPH IS CONSTRUCTED FROM ENTITY CO-OCCURRENCES IN THE SVO TRIPLET
-    entities_from_svo_triplets = get_entities_from_svo_triplets(book, svo_extractor, deduplication_mapper)
-    svo_triplet_graph = create_graph_from_pairs(entities_from_svo_triplets)
-    names, values = graph_entity_importance_evaluation(svo_triplet_graph)
-    # [print((x, y)) for x, y in zip(names, values)]
-    n3 = names
-    v3 = values
-    cutoff_names, cutoff_values = keep_top(names, values, cutoff=cutoff)
-    print(cutoff_names)
-    # values = np.array(v3, dtype=np.float32)
-    # values = values[values > 0]
-    # names = n3[0:len(values)]
-    # print(names)
-    print([[character.sinonims for character in book.characters]])
-    metrics31 = calculate_metrics(book, cutoff_names)
-    metrics32 = calculate_metrics(book, names[0:len(book.characters)])
-    metrics3 = (
-    metrics31[0], metrics31[1], metrics31[2], metrics32[0], metrics32[1], metrics32[2], ranking_metric(book, names))
+    try:
+        entities_from_svo_triplets = get_entities_from_svo_triplets(book, svo_extractor, deduplication_mapper)
+        svo_triplet_graph = create_graph_from_pairs(entities_from_svo_triplets)
 
+        names, values = graph_entity_importance_evaluation(svo_triplet_graph)
+        # [print((x, y)) for x, y in zip(names, values)]
+        n3 = names
+        v3 = values
+        cutoff_names = names
+        cutoff_values = values
+        cutoff_names, cutoff_values = keep_top(names, values, cutoff=cutoff)
+        print(cutoff_names)
+        # values = np.array(v3, dtype=np.float32)
+        # values = values[values > 0]
+        # names = n3[0:len(values)]
+        # print(names)
+        print([[character.sinonims for character in book.characters]])
+        metrics31 = calculate_metrics(book, cutoff_names)
+        metrics32 = calculate_metrics(book, names[0:len(book.characters)])
+        metrics3 = (
+            metrics31[0], metrics31[1], metrics31[2], metrics32[0], metrics32[1], metrics32[2],
+            ranking_metric(book, names))
+    except ValueError:
+        metrics3 = (0, 0, 0, 0, 0, 0, 0)
     if verbose:
         print("Results for importance ranking based on network centralities, where graph is constructed from entity "
               "co-occurrences in the same SVO triplet")
@@ -183,13 +201,11 @@ def evaluate_all(corpus_path="../../books/corpus.tsv"):
 
 
 if __name__ == "__main__":
-    print(precision_at_k(["a", "b", "c"], ["b", "d", "c"], 2))
-
     corpus = get_data("../../books/corpus.tsv", get_text=True)
-    # sl_pipeline = classla.Pipeline("sl", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
-    en_pipeline = stanza.Pipeline("en", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
-    # sl_e = Eventify(language="sl")
-    en_e = Eventify(language="en")
+    sl_pipeline = classla.Pipeline("sl", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
+    # en_pipeline = stanza.Pipeline("en", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
+    sl_e = Eventify(language="sl")
+    # en_e = Eventify(language="en")
     slo_books = []
 
     m1 = [[] for _ in range(7)]
@@ -200,26 +216,26 @@ if __name__ == "__main__":
         if count == 5:
             break
         if book.language == "slovenian":
-            try:
-                continue
-                res = evaluate_book(book, sl_pipeline, sl_e, cutoff=0.8, verbose=False)
-                for (x, y) in zip(res, [m1, m2, m3]):
-                    for i, z in enumerate(x):
-                        y[i].append(z)
+            # try:
 
-                count += 1
-            except Exception as e:
-                print(e)
+            res = evaluate_book(book, sl_pipeline, sl_e, cutoff=0.8, verbose=False)
+            for (x, y) in zip(res, [m1, m2, m3]):
+                for i, z in enumerate(x):
+                    y[i].append(z)
+
+            count += 1
+            # except Exception as e:
+            #     print(e)
         elif book.language == "english":
-            #continue
-            try:
-                res = evaluate_book(book, en_pipeline, en_e, cutoff=0.8, verbose=False)
-                for (x, y) in zip(res, [m1, m2, m3]):
-                    for i, z in enumerate(x):
-                        y[i].append(z)
-                count += 1
-            except Exception as e:
-                print(e)
+            continue
+            # try:
+            res = evaluate_book(book, en_pipeline, en_e, cutoff=0.8, verbose=False)
+            for (x, y) in zip(res, [m1, m2, m3]):
+                for i, z in enumerate(x):
+                    y[i].append(z)
+            count += 1
+            # except Exception as e:
+            #     print(e)
 
     for i, x in enumerate([m1, m2, m3]):
         print("Method ", str(i))
