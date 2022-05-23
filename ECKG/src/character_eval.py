@@ -423,16 +423,18 @@ if __name__ == '__main__':
         relationships_mapped = [(find_char_by_id(book, relation[0]), find_char_by_id(book, relation[1]), relation[2]) for relation in book.relations]
         mapped_rels.append(relationships_mapped)
 
-
+    cc = [[x.name for x in c] for c in characters]
     books = []
     count = 0
+    i = 0
     for ff, book, graph, mr, ner in zip(features, corpus, graphs, mapped_rels, ners):
         x = {}
         x['title'] = book.title
         x['protagonists'] = book.protagonists_names
         x['antagonists'] = book.antagonists_names
         x['language'] = book.language
-        x['relation_eval'] = evaluate_relationships(map_ner(mr, ner), map_ner(get_edgelist(nx.Graph(graph)), ner), map_ner([c.name for c in book.characters], ner))
+        temp_char = map_ner([c.name for c in book.characters], ner)
+        x['relation_eval'] = evaluate_relationships(map_ner(mr, ner), map_ner(get_edgelist(nx.Graph(graph)), ner), temp_char)
         x['gold_relations'] = mr
         x['graph'] = get_edgelist(nx.Graph(graph))
         x['features'] = ff
@@ -444,6 +446,7 @@ if __name__ == '__main__':
         x['ner_mapper'] = ner
 
         count += len(ff)
+        i += 1
         books.append(x)
 
     #X_train, X_test, Y_train, Y_test = train_test_split(features_flat, labels, test_size=0.5, random_state=42)
@@ -471,10 +474,16 @@ if __name__ == '__main__':
 
     evals_test = eval_all_books(corpus_slo, Y_test[:, 3], p_p, pp_p, p_a, pp_a)
 
+    print('TEST:')
+    print(evals_test)
+
     p_a, pp_a = get_predictions(cf_a_svc, features_flat)
-    #p_p, pp_p = get_predictions(cf_p_svc, features_flat)
-    #p, pp = get_predictions(cf_svc, features_flat)
+    p_p, pp_p = get_predictions(cf_p_svc, features_flat)
+    p, pp = get_predictions(cf_svc, features_flat)
 
-    #evals_all = eval_all_books(corpus_slo, labels[:, 3], p_p, pp_p, p_a, pp_a)
+    evals_all = eval_all_books(corpus_slo, labels[:, 3], p_p, pp_p, p_a, pp_a)
 
-    #temp = np.concatenate((labels[:, 2:], np.reshape(p_p, (len(p_p), 1)), np.reshape(p_a, (len(p_a), 1))), axis=1)
+    print('ALL:')
+    print(evals_all)
+
+    temp = np.concatenate((labels[:, 2:], np.reshape(p_p, (len(p_p), 1)), np.reshape(p_a, (len(p_a), 1))), axis=1)
