@@ -351,8 +351,8 @@ def get_relations_from_sentences(data: Document, ner_mapper: dict, coref_pipelin
     print(pairs)
     return pairs
 
-
-def get_relations_from_sentences_coref_sentence_sent(data: Document, ner_mapper: dict, coref_pipeline=None):
+def get_relations_from_sentences_coref_sentence_sent(data: Document, ner_mapper: dict, sa: SentimentAnalysis,
+                                                     coref_pipeline=None):
     """
     Find pairs of entities, which co-occur in the same sentence.
     Returns:
@@ -374,32 +374,29 @@ def get_relations_from_sentences_coref_sentence_sent(data: Document, ner_mapper:
         og_len = len(sentence.entities)
         curr_entities = sentence.entities
         named_entity_word_ids = [x.id - 1 for x in flatten_list([y.words for y in sentence.entities])]
+
         if coref_pipeline:
             for c, id in enumerate(range(id_count, id_count + len(sentence.words))):
                 if c not in named_entity_word_ids:
                     try:
                         ssss = coref_pipeline.coref_chains.resolve(coref_pipeline.doc[id])
-
-                        print(coref_pipeline.mapping_dict[id])
-                        print(ssss)
-                        tmp = coref_pipeline.mapping_dict[id]
-                        sentence.words[c].text = tmp
-                        # curr_entities.append(TempWord(sentence.words[c], c+1))
                         if ssss:
                             for ss in ssss:
                                 curr_entities.append(ss)
+                                appended_words += 1
+                                named_entity_word_ids.append(c)
                     except KeyError:
                         pass
 
             id_count += len(sentence.words)
+        word_list = [x.lemma for x in sentence.words]
+        mask_list = named_entity_word_ids
         if len(curr_entities) > 1:
-
             for x, y in combinations(curr_entities, 2):
-                word_list = [word.lemma for word in sentence.words]
-                mask_list = []
                 try:
                     tmp1 = entity_text_string(x)
                     tmp2 = entity_text_string(y)
+
                     try:
                         tmp1 = ner_mapper[tmp1]
                     except KeyError:
@@ -408,13 +405,16 @@ def get_relations_from_sentences_coref_sentence_sent(data: Document, ner_mapper:
                         tmp2 = ner_mapper[tmp2]
                     except KeyError:
                         tmp2 = find_similar(tmp2, dedup_keys, similarity=80)
-                    if tmp1 and tmp2:
-                        pairs.append((tmp1, None, tmp2))
+                    if tmp1 and tmp2 and tmp1 != tmp2:
+                        sentiment = sa.get_sentiment_sentence(word_list, mask_list)
+                        pairs.append((tmp1, sentiment, tmp2))
+                        # pairs.append((tmp1, None, tmp2))
 
                 except KeyError:
                     # entity is not type PER
                     pass
                     # print("WARNING")
+        del curr_entities[-appended_words:]
     print(pairs)
     return pairs
 
