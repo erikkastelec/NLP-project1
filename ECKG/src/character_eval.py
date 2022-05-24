@@ -167,8 +167,13 @@ def evaluate_book_svo(book: Book, pipeline, svo_extractor, sa, coref_pipeline=No
                                                                                          doc=data,
                                                                                          coref_pipeline=coref_pipeline)
     svo_triplet_graph = create_graph_from_pairs(entities_from_svo_triplets)
-    names, values = graph_entity_importance_evaluation(svo_triplet_graph)
-    characters, relationship_graph = get_characters(svo_sentiment, names, book.text)
+    try:
+        names, values = graph_entity_importance_evaluation(svo_triplet_graph)
+        characters, relationship_graph = get_characters(svo_sentiment, names, book.text)
+    except ValueError:
+        characters = []
+        relationship_graph = nx.MultiGraph()
+
 
     return characters, relationship_graph, deduplication_mapper
 
@@ -207,8 +212,16 @@ def make_dataset(corpus, path, svo, verb):
     graphs = []
     n_mapper = []
 
+    forbidden = ['The Lord Of The Rings: The Fellowship of the Ring']
+
     for book in tqdm(corpus, total=len(corpus), file=sys.stdout):
         print(book.title)
+        if book.title in forbidden:
+            both.append([])
+            graphs.append([])
+            n_mapper.append([])
+            continue
+
         if book.language == "slovenian":
             if svo:
                 characters, graph, ner_mapper = evaluate_book_svo(book, sl_pipeline, sl_e, sa_kss, coref_pipeline=None) # TODO sl coref pipeline
