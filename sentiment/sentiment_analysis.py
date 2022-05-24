@@ -27,6 +27,8 @@ class SentimentAnalysis:
                 continue
             sum_sen += self.get_sentiment_word(word)
             counter += 1
+        if counter == 0:
+            return 0
         return sum_sen / float(counter)
 
 

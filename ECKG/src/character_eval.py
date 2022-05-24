@@ -3,6 +3,8 @@ import numpy as np
 import stanza
 import pickle
 import os
+from tqdm import tqdm
+import sys
 
 from ECKG.src.eventify import Eventify
 from ECKG.src.helper_functions import fix_ner, deduplicate_named_entities, get_relations_from_sentences, \
@@ -128,8 +130,9 @@ def evaluate_book(book: Book, pipeline, sa, coref_pipeline=None, verb=True):
 
     deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True)
 
-    coref_pipeline.process_text(book.text)
-    coref_chains, new_chains = coref_pipeline.unify_naming_coreferee(deduplication_mapper)
+    if coref_pipeline:
+        coref_pipeline.process_text(book.text)
+        coref_chains, new_chains = coref_pipeline.unify_naming_coreferee(deduplication_mapper)
 
     if verb:
         sentence_relations = get_relations_from_sentences_sentiment_verb(data, deduplication_mapper, sa)
@@ -154,16 +157,23 @@ def evaluate_book_svo(book: Book, pipeline, svo_extractor, sa, coref_pipeline=No
     data = fix_ner(data)
 
     deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True)
-    coref_pipeline.process_text(book.text)
-    coref_chains, new_chains = coref_pipeline.unify_naming_coreferee(deduplication_mapper)
+
+    if coref_pipeline:
+        coref_pipeline.process_text(book.text)
+        coref_chains, new_chains = coref_pipeline.unify_naming_coreferee(deduplication_mapper)
 
     entities_from_svo_triplets, svo_sentiment = get_entities_from_svo_triplets_sentiment(book, svo_extractor,
                                                                                          deduplication_mapper, sa,
                                                                                          doc=data,
                                                                                          coref_pipeline=coref_pipeline)
     svo_triplet_graph = create_graph_from_pairs(entities_from_svo_triplets)
-    names, values = graph_entity_importance_evaluation(svo_triplet_graph)
-    characters, relationship_graph = get_characters(svo_sentiment, names, book.text)
+    try:
+        names, values = graph_entity_importance_evaluation(svo_triplet_graph)
+        characters, relationship_graph = get_characters(svo_sentiment, names, book.text)
+    except ValueError:
+        characters = []
+        relationship_graph = nx.MultiGraph()
+
 
     return characters, relationship_graph, deduplication_mapper
 
@@ -202,7 +212,16 @@ def make_dataset(corpus, path, svo, verb):
     graphs = []
     n_mapper = []
 
-    for book in corpus:
+    forbidden = ['The Lord Of The Rings: The Fellowship of the Ring']
+
+    for book in tqdm(corpus, total=len(corpus), file=sys.stdout):
+        print(book.title)
+        if book.title in forbidden:
+            both.append([])
+            graphs.append([])
+            n_mapper.append([])
+            continue
+
         if book.language == "slovenian":
             if svo:
                 characters, graph, ner_mapper = evaluate_book_svo(book, sl_pipeline, sl_e, sa_kss, coref_pipeline=None) # TODO sl coref pipeline
@@ -622,9 +641,9 @@ def evaluate_corpus(books):
 
 if __name__ == '__main__':
     FULL = True
-    path = 'pickles/sent_v1_'
+    path = 'pickles/svo_v1_'
 
-    svo = False
+    svo = True
     verb = False  # sent only, True sentiment on verb only, False sentiment on whole sentence
 
     MAKE_DATASET = False
