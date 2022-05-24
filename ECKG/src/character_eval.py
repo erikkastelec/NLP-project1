@@ -17,7 +17,6 @@ from books.get_data import get_data, Book
 from ECKG.src.character import Character
 from sentiment.sentiment_analysis import *
 
-
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
@@ -26,9 +25,6 @@ from sklearn.ensemble import RandomForestClassifier
 
 import networkx as nx
 import matplotlib.pyplot as plt
-
-
-
 
 
 def train_classifiers(X_train, X_test, Y_train, Y_test):
@@ -49,7 +45,8 @@ def train_classifiers(X_train, X_test, Y_train, Y_test):
     print(f'Decision Tree: {clf1.score(X_test, Y_test)}')
     print(f'Random Forest: {clf4.score(X_test, Y_test)}')
 
-    return clf1, clf2, clf3, clf4
+    return clf1, clf4, clf2, clf3
+
 
 def evaluate_prediction_book(book, characters, predictions_p, predictions_p_proba, predictions_a, predictions_a_proba):
     p_true = []
@@ -67,7 +64,10 @@ def evaluate_prediction_book(book, characters, predictions_p, predictions_p_prob
             continue
         p = predictions_p[i]
         p_true.append(p)
-        p_ranks.append(predictions_p_proba[i][1])
+        try:
+            p_ranks.append(predictions_p_proba[i][1])
+        except:
+            p_ranks.append(None)
         p_names.append(protagonist)
 
     for antagonist in book.antagonists_names:
@@ -78,13 +78,21 @@ def evaluate_prediction_book(book, characters, predictions_p, predictions_p_prob
             continue
         a = predictions_a[i]
         a_true.append(a)
-        a_ranks.append(predictions_a_proba[i][1])
+        try:
+            a_ranks.append(predictions_a_proba[i][1])
+        except:
+            a_ranks.append(None)
         a_names.append(antagonist)
 
     return p_true, p_ranks, p_names, a_true, a_ranks, a_names, book
 
-def get_predictions(classifier, X):
+
+def get_predictions_prob(classifier, X):
     return classifier.predict(X), classifier.predict_proba(X)
+
+
+def get_predictions(classifier, X):
+    return classifier.predict(X)
 
 
 def get_characters(sentiment_pairs, names, text):
@@ -174,7 +182,6 @@ def evaluate_book_svo(book: Book, pipeline, svo_extractor, sa, coref_pipeline=No
         characters = []
         relationship_graph = nx.MultiGraph()
 
-
     return characters, relationship_graph, deduplication_mapper
 
 
@@ -204,7 +211,6 @@ def make_dataset(corpus, path, svo, verb):
     # EN
     sa_afinn = SentimentAnalysis(afinn_en)
     sa_swn = SentimentAnalysis(sentiwordnet_en)
-
 
     sl = []
     en = []
@@ -259,11 +265,11 @@ def make_dataset(corpus, path, svo, verb):
 
     return sl, en, both
 
+
 def get_features(character):
     features = [character.degree, character.negative_t1, character.positive_t2, character.t3, character.times_appeared,
                 character.weight_neg_sum, character.weight_pos_sum]
     return features
-
 
 
 def shape_features(characters_all):
@@ -312,6 +318,7 @@ def shape_labels(corpus, characters_all):
 
     return labels
 
+
 def prune_books(corpus, characters_all, graphs, ners):
     corpus_new = []
     characters_new = []
@@ -325,6 +332,7 @@ def prune_books(corpus, characters_all, graphs, ners):
             ner_new.append(ner)
 
     return corpus_new, characters_new, graphs_new, ner_new
+
 
 def prune_characters(corpus, characters_all, graphs, ners):
     characters_new = []
@@ -344,6 +352,7 @@ def prune_characters(corpus, characters_all, graphs, ners):
             graphs_new.append(graph)
             ner_new.append(ner)
     return corpus_new, characters_new, graphs_new, ner_new
+
 
 def eval_all_books(corpus, characters, p_p, pp_p, p_a, pp_a):
     evals = []
@@ -379,13 +388,11 @@ def draw_network(edgelist, save=False):
     plt.show()
 
 
-
 def draw_network_comparison(our, gold, save=False, path=None):
     g = nx.Graph()
     g.add_weighted_edges_from(our)
     gg = nx.Graph()
     gg.add_weighted_edges_from(gold)
-
 
     nodes_g = gg.nodes()
 
@@ -395,12 +402,9 @@ def draw_network_comparison(our, gold, save=False, path=None):
     pos = pos_g
     # pos = nx.circular_layout(g)
 
-
     edges = g.edges()
     weights = [g[u][v]['weight'] for u, v in edges]
     colors = []
-
-
 
     edges_g = gg.edges()
     edges_g = [edge for edge in edges_g if edge[0] != edge[1]]
@@ -437,7 +441,6 @@ def draw_network_comparison(our, gold, save=False, path=None):
         plt.savefig(path)
     plt.draw()
     plt.show()
-
 
 
 def draw_network_comparison_all(graphs, version, save=False):
@@ -523,17 +526,20 @@ def evaluate_relationships(relationships_gold, relationships, chars):
 
     return results
 
+
 def get_edgelist(graph):
     edges = []
     for edge in graph.edges():
         edges.append((edge[0], edge[1], graph.get_edge_data(edge[0], edge[1])['weight']))
     return edges
 
+
 def find_char_by_id(book, id):
     for character in book.characters:
         if character.id == id:
             return character.name
     return None
+
 
 def map_ner(relationships, ner_mapper):
     res = []
@@ -557,15 +563,20 @@ def map_ner(relationships, ner_mapper):
             res.append((x, y, r[2]))
     return res
 
-def eval_book_prediction(book):
+
+def eval_book_prediction(book, cf_a, cf_p):
+    pred_p = cf_p.predict(np.array(book['features']))
+    pred_a = cf_a.predict(np.array(book['features']))
+
+    labels = [l[3] for l in book['true_labels']]
+
+    prot_gold = book['protagonists']
+    ant_gold = book['antagonists']
+
+    predicted_prot = [labels[i] for i, p in enumerate(pred_p) if p == '1']
+    predicted_ant = [labels[i] for i, a in enumerate(pred_a) if a == '1']
+
     results = {}
-
-    prot_gold = book.protagonists_names
-    ant_gold = book.antagonists_names
-
-    predicted_prot = []
-    predicted_ant = []
-
     len_p_gold = len(prot_gold)
     len_p_pred = len(predicted_prot)
     p_c = 0
@@ -604,7 +615,8 @@ def eval_book_prediction(book):
 
     return results
 
-def evaluate_corpus(books):
+
+def evaluate_corpus(books, res_pa):
     results = {'relationships': {}, 'prot/ant': {}}
 
     pr = sum([int(book['relation_eval']['positive_relationships'].split('/')[0]) for book in books])
@@ -637,13 +649,64 @@ def evaluate_corpus(books):
     results['relationships']['recall'] = recall
     results['relationships']['f1'] = f1
 
+    p_c = sum(book['protagonist_correct'] for book, n, test in res_pa if test == 'test')
+    a_c = sum(book['antagonist_correct'] for book, n, test in res_pa if test == 'test')
+    p_f = sum(book['protagonist_false'] for book, n, test in res_pa if test == 'test')
+    a_f = sum(book['antagonist_false'] for book, n, test in res_pa if test == 'test')
+    p_fn = sum(book['protagonist_fn'] for book, n, test in res_pa if test == 'test')
+    a_fn = sum(book['antagonist_fn'] for book, n, test in res_pa if test == 'test')
+    b_c = p_c + a_c
+    b_f = p_f + a_f
+    b_fn = p_fn + a_fn
+
+    acc_p = p_c / float(p_f + p_c + p_fn + 1e-9)
+    acc_a = a_c / float(a_f + a_c + a_fn + 1e-9)
+    acc_b = b_c / float(b_f + b_c + b_fn + 1e-9)
+
+    pre_p = p_c / float(p_c + p_f + 1e-9)
+    pre_a = a_c / float(a_c + a_f + 1e-9)
+    pre_b = b_c / float(b_c + b_f + 1e-9)
+
+    rec_p = p_c / float(p_c + p_fn + 1e-9)
+    rec_a = a_c / float(a_c + a_fn + 1e-9)
+    rec_b = b_c / float(b_c + b_fn + 1e-9)
+
+    f1_p = 2 * pre_p * rec_p / (pre_p + rec_p + 1e-9)
+    f1_a = 2 * pre_a * rec_a / (pre_a + rec_a + 1e-9)
+    f1_b = 2 * pre_b * rec_b / (pre_b + rec_b + 1e-9)
+
+    results['prot/ant']['accuracy'] = acc_b
+    results['prot/ant']['precision'] = pre_b
+    results['prot/ant']['recall'] = rec_b
+    results['prot/ant']['f1'] = f1_b
+    results['prot/ant']['both_correct'] = b_c
+    results['prot/ant']['both_false'] = b_f
+    results['prot/ant']['both_fn'] = b_fn
+
+    results['prot/ant']['accuracy_p'] = acc_p
+    results['prot/ant']['precision_p'] = pre_p
+    results['prot/ant']['recall_p'] = rec_p
+    results['prot/ant']['f1_p'] = f1_p
+    results['prot/ant']['protagonist_correct'] = p_c
+    results['prot/ant']['protagonist_false'] = p_f
+    results['prot/ant']['protagonist_fn'] = p_fn
+
+    results['prot/ant']['accuracy_a'] = acc_a
+    results['prot/ant']['precision_a'] = pre_a
+    results['prot/ant']['recall_a'] = rec_a
+    results['prot/ant']['f1_a'] = f1_a
+    results['prot/ant']['antagonist_correct'] = a_c
+    results['prot/ant']['antagonist_false'] = a_f
+    results['prot/ant']['antagonist_fn'] = a_fn
+
     return results
+
 
 if __name__ == '__main__':
     FULL = True
-    path = 'pickles/svo_v1_'
+    path = 'pickles/sentv1_'
 
-    svo = True
+    svo = False
     verb = False  # sent only, True sentiment on verb only, False sentiment on whole sentence
 
     MAKE_DATASET = False
@@ -740,25 +803,40 @@ if __name__ == '__main__':
     cf_p_dt, cf_p_rf, cf_p_knn, cf_p_svc = train_classifiers(X_train, X_test, Y_train[:, 1], Y_test[:, 1])
     cf_dt, cf_rf, cf_knn, cf_svc = train_classifiers(X_train, X_test, Y_train[:, 2], Y_test[:, 2])
 
-    #p_a, pp_a = get_predictions(cf_a_svc, X_test)
-    #p_p, pp_p = get_predictions(cf_p_svc, X_test)
-    #p, pp = get_predictions(cf_svc, X_test)
+    #p_a, pp_a = get_predictions_prob(cf_a_svc, X_test)
+    #p_p, pp_p = get_predictions_prob(cf_p_svc, X_test)
+    #p, pp = get_predictions_prob(cf_svc, X_test)
 
-    #evals_test = eval_all_books(corpus_slo, Y_test[:, 3], p_p, pp_p, p_a, pp_a)
+    p_a = get_predictions(cf_a_svc, X_test)
+    p_p = get_predictions(cf_p_svc, X_test)
+    p = get_predictions(cf_svc, X_test)
 
-    #print('TEST:')
-    #print(evals_test)
+    pp_a = np.zeros(len(p_a))
+    pp_p = np.zeros(len(p_p))
+    pp = np.zeros(len(p))
 
-    p_a, pp_a = get_predictions(cf_a_svc, features_flat)
-    p_p, pp_p = get_predictions(cf_p_svc, features_flat)
-    p, pp = get_predictions(cf_svc, features_flat)
+    evals_test = eval_all_books(corpus_slo, Y_test[:, 3], p_p, pp_p, p_a, pp_a)
+
+    print('TEST:')
+    print(evals_test)
+
+    #p_a, pp_a = get_predictions_prob(cf_a_svc, features_flat)
+    #p_p, pp_p = get_predictions(cf_p_svc, features_flat)
+    #p, pp = get_predictions(cf_svc, features_flat)
+
+    p_a = get_predictions(cf_a_svc, features_flat)
+    p_p = get_predictions(cf_p_svc, features_flat)
+    p = get_predictions(cf_svc, features_flat)
+
+    pp_a = np.zeros(len(p_a))
+    pp_p = np.zeros(len(p_p))
+    pp = np.zeros(len(p))
 
     evals_all = eval_all_books(corpus_slo, labels[:, 3], p_p, pp_p, p_a, pp_a)
 
     print('ALL:')
     print(evals_all)
 
-    temp = np.concatenate((labels[:, 2:], np.reshape(p_p, (len(p_p), 1)), np.reshape(p_a, (len(p_a), 1))), axis=1)
 
     if SHOW_PLOTS:
         gs = []
@@ -766,7 +844,19 @@ if __name__ == '__main__':
             gs.append((book['graph'], book['gold_relations'], book['title']))
         draw_network_comparison_all(gs, path.split('/')[1], save=SAVE_PLOTS)
 
-    eval_corpus = evaluate_corpus(books)
+
+    cf_a = cf_a_rf
+    cf_p = cf_p_rf
+
+    res_pred = []
+    for book in books:
+        x = eval_book_prediction(book, cf_a, cf_p)
+        if book['title'] in books_train:
+            res_pred.append((x, book['title'], 'train'))
+        else:
+            res_pred.append((x, book['title'], 'test'))
+
+    eval_corpus = evaluate_corpus(books, res_pred)
 
     if SAVE_CORPUS_EVAL:
         with open(path + 'corpus_eval.pickle', 'wb') as f:

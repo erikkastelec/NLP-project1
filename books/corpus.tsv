@@ -11,7 +11,6 @@ deseti_brat.txt	slovenian	Deseti brat	Josip Jurčič	1866	67481	Marijan	Lovro	Lo
 dogodek_v_mestu_gogi.txt	slovenian	Dogodek v mestu Gogi	Slavko Grum	1930	17260	Prelih	Hana	Hana, Prelih, Vajde, Klikot, Tarbula, Afra, Juta, Klef, Gapit, Teobald, Gospa Prestopil/Prestopil, Tereza, Erik, Elza, Klef	Hana - Prelih, Hana - Vajde	
 trnuljčica.txt	slovenian	Trnuljčica	Jacob and Wilhelm Grimm	1857	681	Trinajsta vila	Trnuljčica, Princ	Trnuljčica/Deklica/Princesa, Princ, Kralj, Kraljica, Dvanajst vil/Vile, Trinajsta vila/Trinajsta, Žaba, Stara ženička	Princ + Trnuljčica, Trinajsta vila - Kralj, Trinajsta vila - Kraljica, Trinajsta vila - Trnuljčica	
 harry_potter_1_slo.txt	slovenian	Harry Potter 1	J. K. Rowling	1997	73799	Mrlakenstein, Dreco	Harry	Harry, Hermiona, Ron, Hagrid, Albus/Dumbledore, Mrlakenstein, Dreco, Neville, McHudurra, Robaus/Raws, Smottan, Vernon/Gospod Dursley, Petunia/Gospa Dursley, Dudley	Harry + Hermiona, Harry + Ron, Ron + Hermiona, Harry + Hagrid, Harry - Mrlakenstein, Harry - Dreco, Harry - Raws, Harry - Vernon, Harry - Petunia, Harry - Dudley, Dudley + Petunia, Dudley + Vernon, Harry + Albus	
-										
 snow_white.txt	english	Little Snow-White	Jacob and Wilhelm Grimm	1812	1907	Queen	Snow White	Snow White, Queen, Mirror, seven dwarfs, Huntsman, Prince	Queen - Snow White, Queen / Mirror, Queen - Huntsan, Queen - Prince, Snow White + seven dwarfs, Snow White + Huntsman, Snow White + Prince	
 romeo_and_juliet.txt	english	Romeo and Juliet	William Shakespeare	1597	25672	Capulet family, Montague family	Romeo Montague	Romeo/Romeo Montague, Juliet/Juliet Capulet, Lord Capulet, Lady Capulet, Tybalt, Montague Family	Romeo + Juliet, Montague Family - Capulet Family, Montague Family - Juliet, Capulet Family - Romeo, Romeo - Tybalt	
 the_lord_of_the_rings.txt	english	The Lord Of The Rings: The Fellowship of the Ring	John Ronald Reuel Tolkien	1954	187813	Sauron	Frodo Baggins	Frodo/Frodo Baggins, Sauron/Dark Lord, Gollum, Gandalf/Wizard, Aragorn, Legolas, Gimli, Samwise Gamgee/Sam, Pippin Took	Frodo - Sauron, Frodo - Gollum, Sauron / Gollum, Sauron - Gandalf, Frodo + Gandalf, Frodo + Aragorn, Frodo + Legolas, Frodo + Gimli, Frodo + Samwise Gamgee, Frodo + Pippin Took	
@@ -22,8 +21,3 @@ spicparkeljc.txt	slovenian	Špicparkerljc	Jacob and Wilhelm Grimm	1812	995	Moži
 miklova_zala.txt	slovenian	Miklova Zala	Jakob Sket	1884	35372	Sultan(turki)	Miklova Zala	Miklova Zala/Zalika, Mirko, Almira, Davorin, Turki?	Zalika + Mirko, Mirko + Almira, Almira - Zalika, Almira - Davorin	
 martin_kacur.txt	slovenian	Martin Kačur	Ivan Cankar	1906	40754		Martin Kačur	Martin Kačur, Tončka, Minka, Ferjan, Župnik, Župan	Martin  Kačur + Tončka, Martin Kačur + Minka, Martin Kačur + župnik, Martin Kačur + župan, Martin Kačur - Ferjan	
 janko_in_metka.txt	slovenian	Janko in Metka	Jacob and Wilhelm Grimm	1812	5721	Čarovnica	Janko, Metka	Janko, Metka, Čarovnica/Coprnica, oče/drvar, mačeha	Janko + Metka, Oče + Janko, Oče + Metka, Mačeha - Janko, Mačeha - Metka, Čarovnica - Janko, Čarovnica - Metka, Oče / Čarovnica, Mačeha / Čarovnica	
-										
-										
-										
-										
-	DEJTA TEXT FILE V: https://drive.google.com/drive/folders/1ofJP_AEVSyvQQhQODcUgaGB6MDrvTuUe?usp=sharing									
