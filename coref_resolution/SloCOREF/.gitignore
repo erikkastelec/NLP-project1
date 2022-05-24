@@ -7,7 +7,7 @@ contextual_model_elmo/
 src/contextual_model_bert/
 src/cseb_senticoref/
 src/classla_resources/
-contextual_model_bert/
+# contextual_model_bert/
 
 # PyCharm stuff
 /.idea/

@@ -1,0 +1,3 @@
+
+Train model scores:
+Best validation set loss: 1.4942521182331208

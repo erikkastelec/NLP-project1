@@ -1,0 +1,13 @@
+{
+    "dropout": 0.35,
+    "pretrained_model_name_or_path": "EMBEDDIA/crosloengual-bert",
+    "dataset_name": "senticoref",
+    "fc_hidden_size": 64,
+    "freeze_pretrained": true,
+    "learning_rate": 0.001,
+    "layer_learning_rate": {},
+    "max_segment_size": 253,
+    "max_span_size": 10,
+    "combine_layers": false,
+    "model_name": "my_bert_model"
+}
