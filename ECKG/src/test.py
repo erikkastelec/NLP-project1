@@ -1,6 +1,5 @@
-from ECKG.src.baseline import BaselineController, MentionPairFeatures
-from contextual_model_bert import ContextualControllerBERT
-from data import read_classla, read_corpus
+from ECKG.src.SloCOREF.baseline import BaselineController, MentionPairFeatures
+from ECKG.src.SloCOREF.data import read_classla, read_corpus
 from eventify import *
 from helper_functions import *
 

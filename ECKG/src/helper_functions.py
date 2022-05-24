@@ -1,3 +1,4 @@
+import copy
 import errno
 import os
 import pickle
@@ -11,6 +12,7 @@ import networkx as nx
 import numpy as np
 import spacy
 from classla import Document
+from classla.models.common.doc import Word
 from fuzzywuzzy import fuzz
 from fuzzywuzzy.process import extract
 from simstring.database.dict import DictDatabase
@@ -18,11 +20,16 @@ from simstring.feature_extractor.character_ngram import CharacterNgramFeatureExt
 from simstring.measure.cosine import CosineMeasure
 from simstring.searcher import Searcher
 
+from ECKG.src.SloCOREF.contextual_model_bert import ContextualControllerBERT
+from ECKG.src.SloCOREF.data import Token, Mention
 from ECKG.src.eventify import Eventify
 from books.get_data import get_data
 from sentiment.sentiment_analysis import SentimentAnalysis
 
 import coreferee
+
+OBJECT_DEPS = {"dobj", "dative", "attr", "oprd"}
+SUBJECT_DEPS = {"nsubj", "nsubjpass", "csubj", "agent", "expl"}
 
 
 def list_to_string(l):
@@ -39,8 +46,138 @@ def list_to_string(l):
     return s
 
 
+"""
+Coreference pipeline class. Modified from: https://github.com/RSDO-DS3/SloCOREF
+"""
+
+
+class SloveneCorefPipeline:
+    def __init__(self, doc: Document, pipeline, coref_model_path="../SloCOREF_contextual_model_bert/bert_model"):
+        self.doc = doc
+        self.pipeline = pipeline
+        self.coref_model = ContextualControllerBERT.from_pretrained(coref_model_path)
+        self.coref_model.eval_mode()
+
+    def classla_output_to_coref_input(self):
+        # Transforms CLASSLA's output into a form that can be fed into coref model.
+        output_tokens = {}
+        output_sentences = []
+        output_mentions = {}
+        output_clusters = []
+
+        str_document = self.doc.text
+        start_char = 0
+        MENTION_MSD = {"N", "V", "R", "P"}  # noun, verb, adverb, pronoun
+
+        current_mention_id = 1
+        token_index_in_document = 0
+        for sentence_index, input_sentence in enumerate(self.doc.sentences):
+            output_sentence = []
+            mention_tokens = []
+            for token_index_in_sentence, input_token in enumerate(input_sentence.tokens):
+                input_word = input_token.words[0]
+                output_token = Token(str(sentence_index) + "-" + str(token_index_in_sentence),
+                                     input_word.text,
+                                     input_word.lemma,
+                                     input_word.xpos,
+                                     sentence_index,
+                                     token_index_in_sentence,
+                                     token_index_in_document)
+
+                # FIXME: This is a possibly inefficient way of finding start_char of a word. Stanza has this functionality
+                #  implemented, Classla unfortunately does not, so we resort to a hack
+                new_start_char = str_document.find(input_word.text, start_char)
+                output_token.start_char = new_start_char
+                if new_start_char != -1:
+                    start_char = new_start_char
+
+                if len(mention_tokens) > 0 and mention_tokens[0].msd[0] != output_token.msd[0]:
+                    output_mentions[current_mention_id] = Mention(current_mention_id, mention_tokens)
+                    output_clusters.append([current_mention_id])
+                    mention_tokens = []
+                    current_mention_id += 1
+
+                # Simplistic mention detection: consider nouns, verbs, adverbs and pronouns as mentions
+                if output_token.msd[0] in MENTION_MSD:
+                    mention_tokens.append(output_token)
+
+                output_tokens[output_token.token_id] = output_token
+                output_sentence.append(output_token.token_id)
+                token_index_in_document += 1
+
+            # Handle possible leftover mention tokens at end of sentence
+            if len(mention_tokens) > 0:
+                output_mentions[current_mention_id] = Mention(current_mention_id, mention_tokens)
+                output_clusters.append([current_mention_id])
+                mention_tokens = []
+                current_mention_id += 1
+
+            output_sentences.append(output_sentence)
+
+        return Document(1, output_tokens, output_sentences, output_mentions, output_clusters)
+
+    def predict(self, threshold, return_singletons):
+        # 1. re-format classla_output into coref_input (incl. mention detection)
+        coref_input = self.classla_output_to_coref_input()
+
+        # 2. process prepared input with coref
+        coref_output = self.coref_model.evaluate_single(coref_input)
+
+        # 4. prepare response (mentions + coreferences)
+        coreferences = []
+        coreferenced_mentions = set()
+        for id2, id1s in coref_output["predictions"].items():
+            if id2 is not None:
+                for id1 in id1s:
+                    mention_score = coref_output["scores"][id1]
+
+                    if threshold is not None and mention_score < threshold:
+                        continue
+
+                    coreferenced_mentions.add(id1)
+                    coreferenced_mentions.add(id2)
+
+                    coreferences.append({
+                        "id1": int(id1),
+                        "id2": int(id2),
+                        "score": mention_score
+                    })
+
+        mentions = []
+        for mention in coref_input.mentions.values():
+            [sentence_id, token_id] = [int(idx) for idx in mention.tokens[0].token_id.split("-")]
+            mention_score = coref_output["scores"][mention.mention_id]
+
+            if return_singletons is False and mention.mention_id not in coreferenced_mentions:
+                continue
+
+            # while this is technically already filtered with coreferenced_mentions, singleton mentions aren't, but they
+            # have some score too that can be thresholded.
+            # if req_body.threshold is not None and mention_score < req_body.threshold:
+            #    continue
+
+            mention_raw_text = " ".join([t.raw_text for t in mention.tokens])
+            mentions.append(
+                {
+                    "id": mention.mention_id,
+                    "start_idx": mention.tokens[0].start_char,
+                    "length": len(mention_raw_text),
+                    "ner_type": self.doc.sentences[sentence_id].tokens[token_id].ner.replace("B-", "").replace(
+                        "I-", ""),
+                    "msd": mention.tokens[0].msd,
+                    "text": mention_raw_text
+                }
+            )
+
+        return {
+            "mentions": mentions,
+            "coreferences": sorted(coreferences, key=lambda x: x["id1"])
+        }
+
+
 class EnglishCorefPipeline:
     def __init__(self):
+        "python -m spacy download en_core_web_trf "
         nlp = spacy.load("en_core_web_trf")
         nlp.add_pipe('coreferee')
         self.pipeline = nlp
@@ -59,12 +196,18 @@ class EnglishCorefPipeline:
         #     print(t)
         #     print(self.doc[id].text)
         # if not t:
-        try:
-            t = self.mapping_dict[id]
-        except KeyError:
-            t = None
-        return t
+        if id:
+            try:
+                t = self.mapping_dict[id]
+            except KeyError:
+                t = None
+            return t
+        else:
+            return None
         # return self.coref_chains.resolve(self.doc[id])
+
+    def get_proper_coref_name(self, id):
+        return self.rules_analyzer.get_propn_subtree(self.doc[id])
 
     def unify_naming_coreferee(self, deduplication_mapper):
         if not self.doc:
@@ -92,6 +235,7 @@ class EnglishCorefPipeline:
                         named_entity_chains[similar] = named_entity_chains[similar] + flatten_list(chain.mentions)
                     except KeyError:
                         named_entity_chains[similar] = flatten_list(chain.mentions)
+                        deduplication_mapper[name] = similar
                 else:
 
                     if word.tag_ == "NN" and word.text not in disregard_list:
@@ -116,9 +260,192 @@ class EnglishCorefPipeline:
         for key, value in named_entity_chains.items():
             for x in value:
                 mapping_dict[x] = key
+            deduplication_mapper[key] = key
         self.mapping_dict = mapping_dict
 
         return named_entity_chains, new_chains_words
+
+
+def get_relations_from_sentences(data: Document, ner_mapper: dict, coref_pipeline=None):
+    """
+    Find pairs of entities, which co-occur in the same sentence.
+    Returns:
+        list of entity verb entity pairs
+    """
+
+    class TempWord:
+        def __init__(self, word: Word, id):
+            self.words = [word]
+            self.id = id
+
+    pairs = []
+    dedup_keys = ner_mapper.keys()
+    id_count = 0
+    # data = copy.deepcopy(data)
+    for i, sentence in enumerate(data.sentences):
+        og_len = len(sentence.entities)
+        curr_entities = sentence.entities
+        named_entity_word_ids = [x.id - 1 for x in flatten_list([y.words for y in sentence.entities])]
+        if coref_pipeline:
+            for c, id in enumerate(range(id_count, id_count + len(sentence.words))):
+                if c not in named_entity_word_ids:
+                    try:
+                        ssss = coref_pipeline.coref_chains.resolve(coref_pipeline.doc[id])
+
+                        print(coref_pipeline.mapping_dict[id])
+                        print(ssss)
+                        tmp = coref_pipeline.mapping_dict[id]
+                        sentence.words[c].text = tmp
+                        # curr_entities.append(TempWord(sentence.words[c], c+1))
+                        if ssss:
+                            for ss in ssss:
+                                curr_entities.append(ss)
+                    except KeyError:
+                        pass
+
+            id_count += len(sentence.words)
+        if len(curr_entities) > 1:
+            curr_words = []
+            verbs = []
+            for j, entity in enumerate(curr_entities):
+                curr_words.append(entity)
+            for w in sentence.words:
+                if w.upos == "VERB":
+                    verbs.append((w.text, w.id))
+            for x, y in combinations(curr_words, 2):
+                try:
+                    appended = False
+                    # for verb in verbs:
+                    #     if min(x.words[0].id, y.words[0].id) < verb[1] < max(x.words[-1].id, y.words[-1].id):
+                    #         appended = True
+                    #         pairs.append((ner_mapper[list_to_string([a.text for a in x.words])], verb[0], ner_mapper[list_to_string([a.text for a in y.words])]))
+                    if entity_text_string(x) != entity_text_string(y):
+
+                        try:
+                            x_heads = []
+                            for w in x.words:
+                                if sentence.words[w.head - 1].upos == "VERB":
+                                    x_heads.append(w.head)
+                            for w in y.words:
+                                if w.head in x_heads:
+                                    appended = True
+                                    pairs.append((ner_mapper[entity_text_string(x)], sentence.words[w.head - 1].text,
+                                                  ner_mapper[entity_text_string(y)]))
+                        except Exception:
+                            pass
+                        if not appended:
+                            tmp1 = entity_text_string(x)
+                            tmp2 = entity_text_string(y)
+                            try:
+                                tmp1 = ner_mapper[tmp1]
+                            except KeyError:
+                                tmp1 = find_similar(tmp1, dedup_keys, similarity=80)
+                            try:
+                                tmp2 = ner_mapper[tmp2]
+                            except KeyError:
+                                tmp2 = find_similar(tmp2, dedup_keys, similarity=80)
+                            if tmp1 and tmp2:
+                                pairs.append((tmp1, None, tmp2))
+                except KeyError:
+                    print('what')
+                    # entity is not type PER
+                    pass
+                    # print("WARNING")
+    print(pairs)
+    return pairs
+
+def get_relations_from_sentences_coref_sentence_sent(data: Document, ner_mapper: dict, sa: SentimentAnalysis,
+                                                     coref_pipeline=None):
+    """
+    Find pairs of entities, which co-occur in the same sentence.
+    Returns:
+        list of entity verb entity pairs
+    """
+
+    class TempWord:
+        def __init__(self, word: Word, id):
+            self.words = [word]
+            self.id = id
+
+    pairs = []
+    dedup_keys = ner_mapper.keys()
+    id_count = 0
+    # data = copy.deepcopy(data)
+
+    for i, sentence in enumerate(data.sentences):
+        appended_words = 0
+        og_len = len(sentence.entities)
+        curr_entities = sentence.entities
+        named_entity_word_ids = [x.id - 1 for x in flatten_list([y.words for y in sentence.entities])]
+
+        if coref_pipeline:
+            for c, id in enumerate(range(id_count, id_count + len(sentence.words))):
+                if c not in named_entity_word_ids:
+                    try:
+                        ssss = coref_pipeline.coref_chains.resolve(coref_pipeline.doc[id])
+                        if ssss:
+                            for ss in ssss:
+                                curr_entities.append(ss)
+                                appended_words += 1
+                                named_entity_word_ids.append(c)
+                    except KeyError:
+                        pass
+
+            id_count += len(sentence.words)
+        word_list = [x.lemma for x in sentence.words]
+        mask_list = named_entity_word_ids
+        if len(curr_entities) > 1:
+            for x, y in combinations(curr_entities, 2):
+                try:
+                    tmp1 = entity_text_string(x)
+                    tmp2 = entity_text_string(y)
+
+                    try:
+                        tmp1 = ner_mapper[tmp1]
+                    except KeyError:
+                        tmp1 = find_similar(tmp1, dedup_keys, similarity=80)
+                    try:
+                        tmp2 = ner_mapper[tmp2]
+                    except KeyError:
+                        tmp2 = find_similar(tmp2, dedup_keys, similarity=80)
+                    if tmp1 and tmp2 and tmp1 != tmp2:
+                        sentiment = sa.get_sentiment_sentence(word_list, mask_list)
+                        pairs.append((tmp1, sentiment, tmp2))
+                        # pairs.append((tmp1, None, tmp2))
+
+                except KeyError:
+                    # entity is not type PER
+                    pass
+                    # print("WARNING")
+        del curr_entities[-appended_words:]
+    print(pairs)
+    return pairs
+
+    pairs = []
+    for i, sentence in enumerate(data.sentences):
+        if len(sentence.entities) > 1:
+            curr_words = []
+            for j, entity in enumerate(sentence.entities):
+                curr_words.append(" ".join(x.text for x in entity.words))
+            for x, y in combinations(curr_words, 2):
+                try:
+                    ner_x = ner_mapper[x]
+                    ner_y = ner_mapper[y]
+                    word_list = [word.lemma for word in sentence.words]
+                    mask_list = []
+                    try:
+                        index_x = word_list.index(x)
+                        index_y = word_list.index(y)
+                        mask_list.append(index_x)
+                        mask_list.append(index_y)
+                    except ValueError:
+                        print("word not found")
+                    sentiment = sa.get_sentiment_sentence(word_list, mask_list)
+                    pairs.append((ner_x, sentiment, ner_y))
+
+                except KeyError:
+                    pass
+    return pairs
 
 
 def keep_top_dict(d, cutoff=0.9):
@@ -263,51 +590,10 @@ def evaluate_triads(triads):
 
 
 def entity_text_string(a):
+    if isinstance(a, spacy.tokens.token.Token):
+        return a.text
     return " ".join(x.text for x in a.words)
 
-
-def get_relations_from_sentences(data: Document, ner_mapper: dict):
-    """
-    Find pairs of entities, which co-occur in the same sentence.
-    Returns:
-        list of entity verb entity pairs
-    """
-    pairs = []
-    for i, sentence in enumerate(data.sentences):
-
-        if len(sentence.entities) > 1:
-            curr_words = []
-            verbs = []
-            for j, entity in enumerate(sentence.entities):
-                curr_words.append(entity)
-            for w in sentence.words:
-                if w.upos == "VERB":
-                    verbs.append((w.text, w.id))
-            for x, y in combinations(curr_words, 2):
-                try:
-                    appended = False
-                    # for verb in verbs:
-                    #     if min(x[1], y[1]) < verb[1] < max(x[1], y[1]):
-                    #         appended = True
-                    #         pairs.append((ner_mapper[x[0]], verb[0], ner_mapper[y[0]]))
-                    #         break
-                    x_heads = []
-                    for w in x.words:
-                        if sentence.words[w.head - 1].upos == "VERB":
-                            x_heads.append(w.head)
-                    for w in y.words:
-                        if w.head in x_heads:
-                            appended = True
-                            pairs.append((ner_mapper[entity_text_string(x)], sentence.words[w.head - 1].text,
-                                          ner_mapper[entity_text_string(y)]))
-                    if not appended:
-                        pairs.append((ner_mapper[entity_text_string(x)], None, ner_mapper[entity_text_string(y)]))
-                except KeyError:
-                    # entity is not type PER
-                    pass
-                    # print("WARNING")
-
-    return pairs
 
 
 def get_relations_from_sentences_sentiment(data: Document, ner_mapper: dict, sa: SentimentAnalysis):
@@ -534,7 +820,6 @@ def deduplicate_named_entities(data, map=True, count_entities=True):
     for j, entity in enumerate(data):
         added = False
         # combine tokens (eg: "Novo", "mesto" -> "Novo mesto")
-
         try:
             name = " ".join([x.text for x in entity.tokens])
         except Exception:
@@ -628,7 +913,7 @@ def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper, doc=
             # o.text = deduplication_mapper[o_sim]
             NER_containing_events.append((s_sim, list_to_string([x.text for x in v]), o_sim))
 
-        elif len(s) < 3 and len(o) < 3:
+        elif len(s) < 3 and len(o) < 3 and coref_pipeline:
             s_ok = None
             o_ok = None
             if not s_sim:
@@ -673,7 +958,6 @@ def get_entities_from_svo_triplets_sentiment(book, e: Eventify, deduplication_ma
         relations.append((NER_containing_events[x][0], sa.get_sentiment_word(NER_containing_events[x][1]),
                           NER_containing_events[x][2]))
     return NER_containing_events, relations
-
 
 
 def remove_from_list(list, unwanted_indexes):

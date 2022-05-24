@@ -5,9 +5,12 @@ import stanza
 from ECKG.src.eventify import Eventify
 from ECKG.src.helper_functions import fix_ner, deduplicate_named_entities, get_relations_from_sentences, \
     create_graph_from_pairs, graph_entity_importance_evaluation, get_entities_from_svo_triplets, find_similar, \
-    EnglishCorefPipeline
+    EnglishCorefPipeline, get_relations_from_sentences_coref_sentence_sent
 from books.get_data import get_data, Book
 import json
+
+from sentiment.sentiment_analysis import SentimentAnalysis, read_lexicon_sentiwordnet
+
 
 def precision_at_k(actual, predicted, k):
     act_set = set(actual)
@@ -137,7 +140,10 @@ def evaluate_book(book: Book, pipeline, coref_pipeline, svo_extractor, cutoff=0.
     # plt.savefig("plot.png")
     # 2. IMPORTANCE BASED ON GRAPH CENTRALITIES, WHERE GRAPH IS CONSTRUCTED FROM ENTITY CO-OCCURRENCES IN THE SAME SENTENCE
     try:
-        sentence_relations = get_relations_from_sentences(data, deduplication_mapper)
+        sentiwordnet_en = read_lexicon_sentiwordnet("../../sentiment/lexicons/SentiWordNet.txt")
+        sa_swn = SentimentAnalysis(sentiwordnet_en)
+        sentence_relations = get_relations_from_sentences_coref_sentence_sent(data, deduplication_mapper, sa_swn,
+                                                                              coref_pipeline=coref_pipeline)
         graph = create_graph_from_pairs(sentence_relations)
         names, values = graph_entity_importance_evaluation(graph)
         cutoff_names = names
@@ -220,7 +226,7 @@ if __name__ == "__main__":
     # sl_pipeline = classla.Pipeline("sl", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
     # sl_e = Eventify(language="sl")
 
-    en_pipeline = stanza.Pipeline("en", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
+    en_pipeline = stanza.Pipeline("en", processors='tokenize,ner, lemma, pos,mwt,  depparse', use_gpu=True)
     en_coref_pipeline = EnglishCorefPipeline()
     en_e = Eventify(language="en")
     slo_books = []
@@ -247,11 +253,12 @@ if __name__ == "__main__":
         elif book.language == "english":
             # continue
             # try:
-            res = evaluate_book(book, en_pipeline, en_coref_pipeline, en_e, cutoff=0.8, verbose=False)
-            for (x, y) in zip(res, [m1, m2, m3]):
-                for i, z in enumerate(x):
-                    y[i].append(z)
-            count += 1
+            if book.title == "Little Red Cap":
+                res = evaluate_book(book, en_pipeline, en_coref_pipeline, en_e, cutoff=0.8, verbose=False)
+                for (x, y) in zip(res, [m1, m2, m3]):
+                    for i, z in enumerate(x):
+                        y[i].append(z)
+                count += 1
             # except Exception as e:
             #     print(e)
 
