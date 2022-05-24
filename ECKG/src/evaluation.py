@@ -4,9 +4,10 @@ import stanza
 
 from ECKG.src.eventify import Eventify
 from ECKG.src.helper_functions import fix_ner, deduplicate_named_entities, get_relations_from_sentences, \
-    create_graph_from_pairs, graph_entity_importance_evaluation, get_entities_from_svo_triplets, find_similar
+    create_graph_from_pairs, graph_entity_importance_evaluation, get_entities_from_svo_triplets, find_similar, \
+    EnglishCorefPipeline
 from books.get_data import get_data, Book
-
+import json
 
 def precision_at_k(actual, predicted, k):
     act_set = set(actual)
@@ -81,7 +82,7 @@ def print_metrics(metrics):
     print("F1: ", str(metrics[2]))
 
 
-def evaluate_book(book: Book, pipeline, svo_extractor, cutoff=0.9, verbose=False):
+def evaluate_book(book: Book, pipeline, coref_pipeline, svo_extractor, cutoff=0.9, verbose=False):
     # Run text through pipeline
     data = pipeline(book.text)
     # Fix NER anomalies
@@ -89,6 +90,20 @@ def evaluate_book(book: Book, pipeline, svo_extractor, cutoff=0.9, verbose=False
 
     # Run named entity deduplication/resolution
     deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True)
+
+    if coref_pipeline:
+        # Coreference resolution (new_chains = (word: scapy object, mentions)
+        coref_chains, new_chains = coref_pipeline.unify_naming_coreferee(coref_pipeline.pipeline(book.text),
+                                                                         deduplication_mapper)
+
+        # Set count of named entities to number of coreference mentions
+        for key, value in coref_chains.items():
+            count[key] = len(value)
+        # Add entities from new_chains to named entity count dict
+        for key, value in new_chains.items():
+            count[value[0].text] = len(value[1])
+
+    count = dict(sorted(count.items(), key=lambda x: -x[1]))
     p = []
     r = []
     f = []
@@ -96,7 +111,6 @@ def evaluate_book(book: Book, pipeline, svo_extractor, cutoff=0.9, verbose=False
     #     print(cutoff)
 
     # 1. IMPORTANCE BASED ON NUMBER OF OCCURRENCES IN THE TEXT
-    count = dict(sorted(count.items(), key=lambda x: -x[1]))
     names = list(count.keys())
     values = list(count.values())
     cutoff_names = names
@@ -151,7 +165,7 @@ def evaluate_book(book: Book, pipeline, svo_extractor, cutoff=0.9, verbose=False
 
     # 3. IMPORTANCE BASED ON GRAPH CENTRALITIES, WHERE GRAPH IS CONSTRUCTED FROM ENTITY CO-OCCURRENCES IN THE SVO TRIPLET
     try:
-        entities_from_svo_triplets = get_entities_from_svo_triplets(book, svo_extractor, deduplication_mapper)
+        entities_from_svo_triplets = get_entities_from_svo_triplets(book, svo_extractor, deduplication_mapper, doc=data)
         svo_triplet_graph = create_graph_from_pairs(entities_from_svo_triplets)
 
         names, values = graph_entity_importance_evaluation(svo_triplet_graph)
@@ -191,7 +205,7 @@ def evaluate_all(corpus_path="../../books/corpus.tsv"):
 
     # Initialize English stanza pipeline
     stanza.download("en")
-    en_pipeline = stanza.Pipeline("en", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
+    en_pipeline = stanza.Pipeline("en", processors='tokenize,ner, lemma, pos, mwt, depparse', use_gpu=True)
     en_e = Eventify(language="en")
     for book in corpus:
         if book.language == "slovenian":
@@ -202,10 +216,11 @@ def evaluate_all(corpus_path="../../books/corpus.tsv"):
 
 if __name__ == "__main__":
     corpus = get_data("../../books/corpus.tsv", get_text=True)
-    sl_pipeline = classla.Pipeline("sl", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
-    # en_pipeline = stanza.Pipeline("en", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
-    sl_e = Eventify(language="sl")
-    # en_e = Eventify(language="en")
+    # sl_pipeline = classla.Pipeline("sl", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
+    en_pipeline = stanza.Pipeline("en", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
+    en_coref_pipeline = EnglishCorefPipeline()
+    # sl_e = Eventify(language="sl")
+    en_e = Eventify(language="en")
     slo_books = []
 
     m1 = [[] for _ in range(7)]
@@ -216,9 +231,10 @@ if __name__ == "__main__":
         if count == 5:
             break
         if book.language == "slovenian":
+            continue
             # try:
 
-            res = evaluate_book(book, sl_pipeline, sl_e, cutoff=0.8, verbose=False)
+            res = evaluate_book(book, sl_pipeline, None, sl_e, cutoff=0.8, verbose=False)
             for (x, y) in zip(res, [m1, m2, m3]):
                 for i, z in enumerate(x):
                     y[i].append(z)
@@ -227,9 +243,9 @@ if __name__ == "__main__":
             # except Exception as e:
             #     print(e)
         elif book.language == "english":
-            continue
+            # continue
             # try:
-            res = evaluate_book(book, en_pipeline, en_e, cutoff=0.8, verbose=False)
+            res = evaluate_book(book, en_pipeline, en_coref_pipeline, en_e, cutoff=0.8, verbose=False)
             for (x, y) in zip(res, [m1, m2, m3]):
                 for i, z in enumerate(x):
                     y[i].append(z)

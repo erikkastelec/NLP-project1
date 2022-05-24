@@ -22,6 +22,7 @@ from ECKG.src.eventify import Eventify
 from books.get_data import get_data
 from sentiment.sentiment_analysis import SentimentAnalysis
 
+import coreferee
 
 def list_to_string(l):
     s = ""
@@ -37,7 +38,7 @@ def list_to_string(l):
     return s
 
 
-class English_coref_pipeline:
+class EnglishCorefPipeline:
     def __init__(self):
         nlp = spacy.load("en_core_web_trf")
         nlp.add_pipe('coreferee')
@@ -237,7 +238,6 @@ def get_relations_from_sentences(data: Document, ner_mapper: dict):
     Find pairs of entities, which co-occur in the same sentence.
     Returns:
         list of entity verb entity pairs
-        TODO: verb extraction -> None for now
     """
     pairs = []
     for i, sentence in enumerate(data.sentences):
@@ -571,9 +571,12 @@ def most_frequent_item(l):
     return num
 
 
-def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper):
+def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper, doc=None):
     dedup_keys = deduplication_mapper.keys()
-    events = e.eventify(book.text)
+    if doc:
+        events = e.eventify(book.text, data=doc)
+    else:
+        events = e.eventify(book.text)
     NER_containing_events = []
     event_entity_count = {}
     event_entities = []

@@ -27,7 +27,6 @@ class Eventify:
         self.language = language
         self.empty_token = '<|EMPTY|>'
         self.non_wanted_deps = ['aux', 'det', 'discourse', 'reparandum', 'mark', "aux:pass"]
-
         if self.language == "sl":
 
             self.nlp = classla.Pipeline('sl',
@@ -53,8 +52,8 @@ class Eventify:
         self.mode = mode
         self.stack = []
 
-    def eventify(self, text):
-        conll_sent, doc = self.generateConll(text)
+    def eventify(self, text, data=None):
+        conll_sent, doc = self.generateConll(text, doc=data)
         doc_events = []
         for sent_idx, conll in enumerate(conll_sent):
             conll_example = [ud_parse for sent_id, ud_parse in load_conllu(conll)][0]
@@ -99,8 +98,9 @@ class Eventify:
 
         return events
 
-    def generateConll(self, text):
-        doc = self.nlp(text)
+    def generateConll(self, text, doc=None):
+        if doc is None:
+            doc = self.nlp(text)
         dicts = doc.to_dict()
         conll_sent = []
         if self.language == "sl":
