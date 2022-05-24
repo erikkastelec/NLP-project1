@@ -6,6 +6,8 @@ class SentimentAnalysis:
         self.lexicon = lexicon
 
     def get_sentiment_word(self, word):
+        if word is None:
+            return 0
         wl = word.lower()
         if wl in self.lexicon:
             return self.lexicon[wl]

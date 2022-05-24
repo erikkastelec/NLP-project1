@@ -2,10 +2,14 @@ import errno
 import os
 import pickle
 from collections import Counter
-from itertools import combinations
 from collections import defaultdict
+from itertools import combinations
+from statistics import mean
+
 import classla
 import networkx as nx
+import numpy as np
+import spacy
 from classla import Document
 from fuzzywuzzy import fuzz
 from fuzzywuzzy.process import extract
@@ -17,7 +21,82 @@ from simstring.searcher import Searcher
 from ECKG.src.eventify import Eventify
 from books.get_data import get_data
 from sentiment.sentiment_analysis import SentimentAnalysis
-from statistics import mean
+
+import coreferee
+
+def list_to_string(l):
+    s = ""
+    try:
+        s = l[0]
+    except IndexError:
+        return ""
+    for x in range(1, len(l)):
+        try:
+            s += " " + l[x]
+        except TypeError:
+            print("hello")
+    return s
+
+
+class EnglishCorefPipeline:
+    def __init__(self):
+        nlp = spacy.load("en_core_web_trf")
+        nlp.add_pipe('coreferee')
+        self.pipeline = nlp
+        self.rules_analyzer = nlp.get_pipe('coreferee').annotator.rules_analyzer
+
+    def unify_naming_coreferee(self, doc, deduplication_mapper):
+        dedup_keys = deduplication_mapper.keys()
+        disregard_list = ["man", "woman", "name", ]
+        chains = doc._.coref_chains
+        named_entity_chains = {}
+        new_chains = {}
+        # (spacy word, count)
+        new_chains_words = {}
+
+        for chain in chains:
+            if len(chain.mentions[chain.most_specific_mention_index]) == 1:
+                word = doc[chain.mentions[chain.most_specific_mention_index].root_index]
+                name = list_to_string([x.text for x in self.rules_analyzer.get_propn_subtree(word)])
+                if isinstance(name, str) and name == "":
+                    name = list_to_string(
+                        [doc[x].text for x in chain.mentions[chain.most_specific_mention_index].token_indexes])
+
+                similar = find_similar(name, dedup_keys, similarity=80)
+                if similar:
+                    try:
+                        named_entity_chains[similar] = named_entity_chains[similar] + flatten_list(chain.mentions)
+                    except KeyError:
+                        named_entity_chains[similar] = flatten_list(chain.mentions)
+                else:
+
+                    if word.tag_ == "NN" and word.text not in disregard_list:
+                        try:
+                            new_chains_words[name] = (new_chains_words[name][0], new_chains_words[name][1] + 1)
+                            new_chains[name] = new_chains[name] + flatten_list(chain.mentions)
+                        except KeyError:
+                            print(name)
+                            new_chains_words[name] = (word, 1)
+                            new_chains[name] = flatten_list(chain.mentions)
+
+        # sort dict
+        new_chains_words = dict(sorted(new_chains_words.items(), key=lambda x: -x[1][1]))
+        # Keep only top 10% new ones
+        new_chains_words = keep_top_dict(new_chains_words)
+        for key, value in new_chains_words.items():
+            new_chains_words[key] = (value[0], new_chains[key])
+        return named_entity_chains, new_chains_words
+
+
+def keep_top_dict(d, cutoff=0.9):
+    names = list(d.keys())
+    values_og = list(d.values())
+    values = [x[1] for x in values_og]
+    values = np.array(values)
+    values = values[values > np.quantile(values, cutoff)].tolist()
+    names = names[0:len(values)]
+    values = values_og[0:len(values)]
+    return {k: v for k, v in zip(names, values)}
 
 
 def map_text(text, mapper):
@@ -34,7 +113,8 @@ def graph_entity_importance_evaluation(G: nx.Graph, centrality_weights=None):
     if centrality_weights is None:
         centrality_weights = [0.33, 0.33, 0.33]
         centrality_weights = [1]
-    eigenvector_centrality = list(nx.eigenvector_centrality(G, weight="weight").values())
+    # eigenvector_centrality = list(nx.eigenvector_centrality(G, weight="weight").values())
+    eigenvector_centrality = []
     degree_centrality = list(nx.degree_centrality(G).values())
     closeness_centrality = list(nx.closeness_centrality(G, distance="weight").values())
     betweenness_centrality = list(nx.betweenness_centrality(G, weight="weight").values())
@@ -56,9 +136,11 @@ def is_similar_string(a, b, similarity=70):
 
 def find_similar(a, l, similarity=70):
     res = extract(a, l, limit=1, scorer=fuzz.token_set_ratio)
-    if res[0][1] > 70:
-        return res[0][0]
-
+    try:
+        if res[0][1] > similarity:
+            return res[0][0]
+    except IndexError:
+        pass
     return None
 
 
@@ -76,10 +158,12 @@ def create_graph_from_pairs(pairs):
 
     return GG
 
+
 def create_graph_from_pairs_sentiment(pairs):
     MG = nx.MultiGraph()
     MG.add_weighted_edges_from([(x, y, s) for (x, y), s in pairs])
     return MG
+
 
 def get_triads(g):
     triads = []
@@ -91,6 +175,7 @@ def get_triads(g):
         triads.append(sub)
 
     return triads
+
 
 def evaluate_triads(triads):
     triad_classes = {'t0': [], 't1': [], 't2': [], 't3': []}
@@ -104,8 +189,16 @@ def evaluate_triads(triads):
         p = defaultdict(int)
         n = defaultdict(int)
 
-        for x, y, _ in list(triad.edges):
-            if triad.adj[x][y][0]['weight'] > 0:
+        for z in list(triad.edges):
+            x = z[0]
+            y = z[1]
+
+            try:
+                weight = triad[x][y][0]['weight']
+            except KeyError:
+                weight = triad.adj[x][y]['weight']
+
+            if weight > 0:
                 pos += 1
                 p[x] += 1
                 p[y] += 1
@@ -136,24 +229,46 @@ def evaluate_triads(triads):
     return triad_classes, (t0s, t1s, t2s, t3s)
 
 
+def entity_text_string(a):
+    return " ".join(x.text for x in a.words)
+
 
 def get_relations_from_sentences(data: Document, ner_mapper: dict):
     """
     Find pairs of entities, which co-occur in the same sentence.
     Returns:
         list of entity verb entity pairs
-        TODO: verb extraction -> None for now
     """
     pairs = []
     for i, sentence in enumerate(data.sentences):
 
         if len(sentence.entities) > 1:
             curr_words = []
+            verbs = []
             for j, entity in enumerate(sentence.entities):
-                curr_words.append(" ".join(x.text for x in entity.words))
+                curr_words.append(entity)
+            for w in sentence.words:
+                if w.upos == "VERB":
+                    verbs.append((w.text, w.id))
             for x, y in combinations(curr_words, 2):
                 try:
-                    pairs.append((ner_mapper[x], None, ner_mapper[y]))
+                    appended = False
+                    # for verb in verbs:
+                    #     if min(x[1], y[1]) < verb[1] < max(x[1], y[1]):
+                    #         appended = True
+                    #         pairs.append((ner_mapper[x[0]], verb[0], ner_mapper[y[0]]))
+                    #         break
+                    x_heads = []
+                    for w in x.words:
+                        if sentence.words[w.head - 1].upos == "VERB":
+                            x_heads.append(w.head)
+                    for w in y.words:
+                        if w.head in x_heads:
+                            appended = True
+                            pairs.append((ner_mapper[entity_text_string(x)], sentence.words[w.head - 1].text,
+                                          ner_mapper[entity_text_string(y)]))
+                    if not appended:
+                        pairs.append((ner_mapper[entity_text_string(x)], None, ner_mapper[entity_text_string(y)]))
                 except KeyError:
                     # entity is not type PER
                     pass
@@ -192,7 +307,59 @@ def get_relations_from_sentences_sentiment(data: Document, ner_mapper: dict, sa:
                     pairs.append((ner_x, sentiment, ner_y))
 
                 except KeyError:
-                    print("WARNING")
+                    pass
+    return pairs
+
+def get_relations_from_sentences_sentiment_verb(data: Document, ner_mapper: dict, sa: SentimentAnalysis):
+    """
+    Find pairs of entities, which co-occur in the same sentence and attach sentiment.
+    Returns:
+        list of entity verb entity sentiment pairs
+        TODO: verb extraction -> None for now
+    """
+    pairs = []
+    for i, sentence in enumerate(data.sentences):
+
+        if len(sentence.entities) > 1:
+            curr_words = []
+            verbs = []
+            for j, entity in enumerate(sentence.entities):
+                curr_words.append(entity)
+            for w in sentence.words:
+                if w.upos == "VERB":
+                    verbs.append((w.text, w.id))
+            for x, y in combinations(curr_words, 2):
+                try:
+                    appended = False
+                    x_heads = []
+                    for w in x.words:
+                        if sentence.words[w.head - 1].upos == "VERB":
+                            x_heads.append(w.head)
+                    for w in y.words:
+                        if w.head in x_heads:
+                            appended = True
+                            verb = sentence.words[w.head - 1].text
+                            sentiment = sa.get_sentiment_word(verb)
+                            pairs.append((ner_mapper[entity_text_string(x)], sentiment,
+                                          ner_mapper[entity_text_string(y)]))
+                    if not appended:
+                        word_list = [word.lemma for word in sentence.words]
+                        mask_list = []
+                        try:
+                            index_x = word_list.index(x)
+                            index_y = word_list.index(y)
+                            mask_list.append(index_x)
+                            mask_list.append(index_y)
+                        except ValueError:
+                            #print("word not found")
+                            pass
+                        sentiment = sa.get_sentiment_sentence(word_list, mask_list)
+                        pairs.append((ner_mapper[entity_text_string(x)], sentiment, ner_mapper[entity_text_string(y)]))
+                except KeyError:
+                    # entity is not type PER
+                    pass
+                    # print("WARNING")
+
     return pairs
 
 
@@ -225,25 +392,77 @@ def group_relations(pairs):
     return final_rel
 
 
+def flatten_list(l):
+    return [j for i in l for j in i]
+
+
+
 def fix_ner(data):
     """
     Fixes common problems with NER (detecting only ADJ and not noun after it)
     Keeps only PER entities
     """
     data.entities = []
+    noun_criterium = lambda word: word.xpos in ["NNP"] and word.text not in flatten_list(
+        [x.split(" ") for x in ents]) and len(
+        word.text) > 2
+
     for i, sentence in enumerate(data.sentences):
+        delete_list = []
+        #     start_char = None
+        #     word_text = None
+        #     sentence_len = len(sentence.words)
+        #     ents = [ent.text for ent in sentence.entities]
+        #     for j, word in enumerate(sentence.words):
+        #         # if word.text == "house" or word.text == "father":
+        #         #     print("hello")
+        #         if start_char:
+        #             if sentence_len <= j + 1 or not noun_criterium(sentence.words[j + 1]):
+        #                 data.entities.append({
+        #                     "text": word_text + " " + word.text,
+        #                     "type": "PERSON",
+        #                     "start_char": start_char,
+        #                     "end_char": word.end_char
+        #                 })
+        #                 word_text = None
+        #                 start_char = None
+        #         else:
+        #             if noun_criterium(word):
+        #                 try:
+        #                     if sentence_len > (j + 1) and noun_criterium(sentence.words[j + 1]):
+        #                         start_char = word.start_char
+        #                         word_text = word.text
+        #                     else:
+        #                         start_char = None
+        #                         word_text = None
+        #                         data.entities.append({
+        #                             "text": word.text,
+        #                             "type": "PERSON",
+        #                             "start_char": word.start_char,
+        #                             "end_char": word.end_char
+        #                         })
+        #                 except IndexError:
+        #                     print("hello")
+
         if len(sentence.entities) != 0:
             for j, entity in enumerate(sentence.entities):
                 # Keep only PER entities
-                if entity.type == "PER":
+                if (entity.type == "PER" or entity.type == "PERSON") and "VERB" not in [x.upos for x in entity.words]:
                     if len(entity.words) == 1:
-                        if entity.words[0].upos == "ADJ" and data.sentences[i].words[
-                            entity.words[0].head - 1].upos == "NOUN":
+                        if (entity.words[0].upos == "ADJ" or entity.words[0].upos == "VERB") and \
+                                data.sentences[i].words[
+                                    entity.words[0].head - 1].upos == "NOUN":
                             data.sentences[i].entities[j].tokens.append(
                                 data.sentences[i].words[entity.words[0].head - 1].parent)
                             data.sentences[i].entities[j].words.append(
                                 data.sentences[i].words[entity.words[0].head - 1])
                     data.entities.append(data.sentences[i].entities[j])
+                else:
+                    delete_list.append(j)
+        if not len(delete_list) == 0:
+            for e in reversed(delete_list):
+                del data.sentences[i].entities[e]
+
     return data
 
 
@@ -283,6 +502,8 @@ def deduplicate_named_entities(data, map=True, count_entities=True):
             name = " ".join([x.text for x in entity.tokens])
         except Exception:
             name = entity
+            if isinstance(entity, dict):
+                name = entity["text"]
 
         # Try finding it in aliases
         try:
@@ -350,9 +571,12 @@ def most_frequent_item(l):
     return num
 
 
-def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper):
+def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper, doc=None):
     dedup_keys = deduplication_mapper.keys()
-    events = e.eventify(book.text)
+    if doc:
+        events = e.eventify(book.text, data=doc)
+    else:
+        events = e.eventify(book.text)
     NER_containing_events = []
     event_entity_count = {}
     event_entities = []
@@ -388,7 +612,7 @@ def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper):
     return NER_containing_events
 
 
-def get_entities_from_svo_triplets_sentiment(book, e: Eventify, deduplication_mapper,  sa: SentimentAnalysis):
+def get_entities_from_svo_triplets_sentiment(book, e: Eventify, deduplication_mapper, sa: SentimentAnalysis):
     dedup_keys = deduplication_mapper.keys()
     events = e.eventify(book.text)
     NER_containing_events = []
@@ -429,6 +653,7 @@ def get_entities_from_svo_triplets_sentiment(book, e: Eventify, deduplication_ma
         relations.append((deduplication_mapper[s], sentiment, deduplication_mapper[o]))
 
     return NER_containing_events, relations
+
 
 def remove_from_list(list, unwanted_indexes):
     """
