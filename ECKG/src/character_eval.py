@@ -12,7 +12,7 @@ from ECKG.src.helper_functions import fix_ner, deduplicate_named_entities, get_r
     get_relations_from_sentences_sentiment, get_relations_from_sentences_sentiment_verb, group_relations_filter, \
     create_graph_from_pairs_sentiment, group_relations, \
     get_triads, evaluate_triads, get_entities_from_svo_triplets_sentiment, EnglishCorefPipeline, \
-    get_relations_from_sentences_coref_sentence_sent
+    get_relations_from_sentences_coref_sentence_sent, is_similar_string, find_similar
 from books.get_data import get_data, Book
 from ECKG.src.character import Character
 from sentiment.sentiment_analysis import *
@@ -130,13 +130,16 @@ def get_characters(sentiment_pairs, names, text):
     return characters, relationship_graph
 
 
-def evaluate_book(book: Book, pipeline, sa, coref_pipeline=None, verb=True):
+def evaluate_book(book: Book, pipeline, sa, coref_pipeline=None, verb=True, true_chars=False):
     # Run text through pipeline
     data = pipeline(book.text)
     # Fix NER anomalies
     data = fix_ner(data)
 
-    deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True)
+    if true_chars:
+        deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True, add_missed=True, book=book)
+    else:
+        deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True)
 
     if coref_pipeline:
         coref_pipeline.process_text(book.text)
@@ -158,13 +161,16 @@ def evaluate_book(book: Book, pipeline, sa, coref_pipeline=None, verb=True):
     return characters, relationship_graph, deduplication_mapper
 
 
-def evaluate_book_svo(book: Book, pipeline, svo_extractor, sa, coref_pipeline=None):
+def evaluate_book_svo(book: Book, pipeline, svo_extractor, sa, coref_pipeline=None, true_chars=False):
     # Run text through pipeline
     data = pipeline(book.text)
     # Fix NER anomalies
     data = fix_ner(data)
 
-    deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True)
+    if true_chars:
+        deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True, add_missed=True, book=book)
+    else:
+        deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True)
 
     if coref_pipeline:
         coref_pipeline.process_text(book.text)
@@ -185,7 +191,7 @@ def evaluate_book_svo(book: Book, pipeline, svo_extractor, sa, coref_pipeline=No
     return characters, relationship_graph, deduplication_mapper
 
 
-def make_dataset(corpus, path, svo, verb):
+def make_dataset(corpus, path, svo, verb, true_chars):
     # Initialize Slovene classla pipeline
     classla.download('sl')
     sl_pipeline = classla.Pipeline("sl", processors='tokenize, ner, lemma, pos, depparse', use_gpu=True)
@@ -218,16 +224,16 @@ def make_dataset(corpus, path, svo, verb):
     graphs = []
     n_mapper = []
 
-    forbidden = ['The Lord Of The Rings: The Fellowship of the Ring', "The Great Gatsby", "Anna Karenina"]
+    #forbidden = ['The Lord Of The Rings: The Fellowship of the Ring', 'The Great Gatsby', 'Anna Karenina']
+    forbidden = ['Harry Potter 1', 'The Lord Of The Rings: The Fellowship of the Ring', 'The Great Gatsby']
     for book in tqdm(corpus, total=len(corpus), file=sys.stdout):
-
+        print(book.title)
         if book.title in forbidden:
             both.append([])
             graphs.append([])
             n_mapper.append([])
             continue
 
-        print(book.title)
         try:
             if book.language == "slovenian":
                 if svo:
@@ -351,11 +357,10 @@ def prune_characters(corpus, characters_all, graphs, ners):
     graphs_new = []
     ner_new = []
     for book, characters, graph, ner in zip(corpus, characters_all, graphs, ners):
-        characters_with_sinonims = [[character.name] + character.sinonims for character in book.characters]
-        characters_with_sinonims = [item for sublist in characters_with_sinonims for item in sublist]
+        characters_with_sinonims = flatten([[character.name] + character.sinonims for character in book.characters])
         n_char = []
         for character in characters:
-            if character.name in characters_with_sinonims:
+            if find_similar(character.name, characters_with_sinonims) is not None:
                 n_char.append(character)
         if len(n_char) > 0:
             corpus_new.append(book)
@@ -492,10 +497,10 @@ def evaluate_relationships(relationships_gold, relationships, chars):
     lgn = sum([1 if r[2] == 'negative' else 0 for r in relationships_gold])
 
     for r in rl:
-        if r[0] in chars and r[1] in chars:
+        if find_similar(r[0], chars) is not None and find_similar(r[1],chars) is not None:
             len_pred += 1
             for g in relationships_gold:
-                if r[0] in g and r[1] in g:
+                if is_similar_string(r[0], g[0], 90) and is_similar_string(r[1], g[1], 90) or is_similar_string(r[0], g[1], 90) and is_similar_string(r[1], g[0], 90):
                     if r[2] == g[2]:
                         correct += 1
                         if r[2] == 'positive':
@@ -715,7 +720,8 @@ def evaluate_corpus(books, res_pa):
 
 if __name__ == '__main__':
     FULL = True
-    path = 'pickles/sentv1_'
+    TRUE_CHARS = False
+    path = 'pickles/sent_v2_'
 
     svo = False
     verb = False  # sent only, True sentiment on verb only, False sentiment on whole sentence
@@ -738,7 +744,7 @@ if __name__ == '__main__':
     corpus_slo = [book for book in corpus_full if book.language == "slovenian"]
     corpus_eng = [book for book in corpus_full if book.language != "slovenian"]
     if MAKE_DATASET:
-        make_dataset(corpus_full, path, svo, verb)
+        make_dataset(corpus_full, path, svo, verb, TRUE_CHARS)
 
     with open(path + 'characters_all.pickle', 'rb') as f:
         data_set = pickle.load(f)
