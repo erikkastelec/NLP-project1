@@ -218,34 +218,45 @@ def make_dataset(corpus, path, svo, verb):
     graphs = []
     n_mapper = []
 
-    forbidden = ['The Lord Of The Rings: The Fellowship of the Ring']
-
+    forbidden = ['The Lord Of The Rings: The Fellowship of the Ring', "The Great Gatsby", "Anna Karenina"]
     for book in tqdm(corpus, total=len(corpus), file=sys.stdout):
-        print(book.title)
+
         if book.title in forbidden:
             both.append([])
             graphs.append([])
             n_mapper.append([])
             continue
 
-        if book.language == "slovenian":
-            if svo:
-                characters, graph, ner_mapper = evaluate_book_svo(book, sl_pipeline, sl_e, sa_kss, coref_pipeline=None) # TODO sl coref pipeline
+        print(book.title)
+        try:
+            if book.language == "slovenian":
+                if svo:
+                    characters, graph, ner_mapper = evaluate_book_svo(book, sl_pipeline, sl_e, sa_kss,
+                                                                      coref_pipeline=None)  # TODO sl coref pipeline
+                else:
+                    characters, graph, ner_mapper = evaluate_book(book, sl_pipeline, sa_kss, coref_pipeline=None,
+                                                                  verb=verb)
+                sl.append(characters)
+                both.append(characters)
+                graphs.append(graph)
+                n_mapper.append(ner_mapper)
             else:
-                characters, graph, ner_mapper = evaluate_book(book, sl_pipeline, sa_kss, coref_pipeline=None, verb=verb)
-            sl.append(characters)
-            both.append(characters)
-            graphs.append(graph)
-            n_mapper.append(ner_mapper)
-        else:
-            if svo:
-                characters, graph, ner_mapper = evaluate_book_svo(book, en_pipeline, en_e, sa_swn, coref_pipeline=en_coref_pipeline)
-            else:
-                characters, graph, ner_mapper = evaluate_book(book, en_pipeline, sa_swn, coref_pipeline=en_coref_pipeline, verb=verb)
-            en.append(characters)
-            both.append(characters)
-            graphs.append(graph)
-            n_mapper.append(ner_mapper)
+                if svo:
+                    characters, graph, ner_mapper = evaluate_book_svo(book, en_pipeline, en_e, sa_swn,
+                                                                      coref_pipeline=en_coref_pipeline)
+                else:
+                    characters, graph, ner_mapper = evaluate_book(book, en_pipeline, sa_swn,
+                                                                  coref_pipeline=en_coref_pipeline, verb=verb)
+                en.append(characters)
+                both.append(characters)
+                graphs.append(graph)
+                n_mapper.append(ner_mapper)
+        except Exception as e:
+            print("Failed to analyze: ", book.title)
+            print(e)
+            both.append([])
+            graphs.append([])
+            n_mapper.append([])
 
 
     #with open('characters_sl.pickle', 'wb') as f:

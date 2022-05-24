@@ -143,7 +143,7 @@ class SloveneCorefPipeline:
                         "score": mention_score
                     })
 
-        print("test")
+
         mentions = []
         for mention in coref_input.mentions.values():
             [sentence_id, token_id] = [int(idx) for idx in mention.tokens[0].token_id.split("-")]
@@ -156,7 +156,6 @@ class SloveneCorefPipeline:
             # have some score too that can be thresholded.
             # if req_body.threshold is not None and mention_score < req_body.threshold:
             #    continue
-            print("test")
             mention_raw_text = " ".join([t.raw_text for t in mention.tokens])
             mentions.append(
                 {
@@ -214,7 +213,7 @@ class EnglishCorefPipeline:
         if not self.doc:
             raise Exception("No text has been processed. (call process_text(text))")
         dedup_keys = deduplication_mapper.keys()
-        disregard_list = ["man", "woman", "name", ]
+        disregard_list = ["man", "woman", "name"]
         chains = self.doc._.coref_chains
         self.coref_chains = chains
         named_entity_chains = {}
