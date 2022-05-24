@@ -123,7 +123,7 @@ class SloveneCorefPipeline:
         # 2. process prepared input with coref
         coref_output = self.coref_model.evaluate_single(coref_input)
 
-        # 4. prepare response (mentions + coreferences)
+        # 3. prepare response (mentions + coreferences)
         coreferences = []
         coreferenced_mentions = set()
         for id2, id1s in coref_output["predictions"].items():
