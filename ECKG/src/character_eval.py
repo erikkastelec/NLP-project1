@@ -2,6 +2,7 @@ import classla
 import numpy as np
 import stanza
 import pickle
+import os
 
 from ECKG.src.eventify import Eventify
 from ECKG.src.helper_functions import fix_ner, deduplicate_named_entities, get_relations_from_sentences, \
@@ -143,33 +144,33 @@ def evaluate_book(book: Book, pipeline, sa, verb=True):
 
 def evaluate_book_svo(book: Book, pipeline, svo_extractor, sa, coref_pipeline=None):
     # Run text through pipeline
-    data = pipeline(book.text)
+    data_og = pipeline(book.text)
     # Fix NER anomalies
-    data = fix_ner(data)
+    data = fix_ner(data_og)
 
     deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True)
     coref_pipeline.process_text(book.text)
 
     entities_from_svo_triplets, svo_sentiment = get_entities_from_svo_triplets_sentiment(book, svo_extractor,
                                                                                          deduplication_mapper, sa,
-                                                                                         doc=data,
+                                                                                         doc=data_og,
                                                                                          coref_pipeline=coref_pipeline)
     svo_triplet_graph = create_graph_from_pairs(entities_from_svo_triplets)
     names, values = graph_entity_importance_evaluation(svo_triplet_graph)
     characters, relationship_graph = get_characters(svo_sentiment, names, book.text)
 
-    return characters, relationship_graph
+    return characters, relationship_graph, deduplication_mapper
 
 
-def make_dataset(corpus):
+def make_dataset(corpus, path, svo, verb):
     # Initialize Slovene classla pipeline
     classla.download('sl')
-    sl_pipeline = classla.Pipeline("sl", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
+    sl_pipeline = classla.Pipeline("sl", processors='tokenize, ner, lemma, pos, depparse', use_gpu=True)
     sl_e = Eventify(language="sl")
 
     # Initialize English stanza pipeline
     stanza.download("en")
-    en_pipeline = stanza.Pipeline("en", processors='tokenize,ner, lemma, pos,pwt,  depparse', use_gpu=True)
+    en_pipeline = stanza.Pipeline("en", processors='tokenize, ner, lemma, pos, mwt, depparse', use_gpu=True)
     en_e = Eventify(language="en")
     en_coref_pipeline = EnglishCorefPipeline()
 
@@ -197,20 +198,23 @@ def make_dataset(corpus):
 
     for book in corpus:
         if book.language == "slovenian":
-            characters, graph, ner_mapper = evaluate_book(book, sl_pipeline, sa_kss)
+            if svo:
+                characters, graph, ner_mapper = evaluate_book_svo(book, sl_pipeline, sl_e, sa_kss) # TODO sl coref pipeline
+            else:
+                characters, graph, ner_mapper = evaluate_book(book, sl_pipeline, sa_kss, verb)
             sl.append(characters)
             both.append(characters)
             graphs.append(graph)
             n_mapper.append(ner_mapper)
         else:
-            characters, graph, ner_mapper = evaluate_book(book, en_pipeline, sa_swn)
+            if svo:
+                characters, graph, ner_mapper = evaluate_book_svo(book, sl_pipeline, en_e, sa_kss, en_coref_pipeline)
+            else:
+                characters, graph, ner_mapper = evaluate_book(book, en_pipeline, sa_swn, verb)
             en.append(characters)
             both.append(characters)
             graphs.append(graph)
             n_mapper.append(ner_mapper)
-
-
-
 
 
     #with open('characters_sl.pickle', 'wb') as f:
@@ -219,13 +223,13 @@ def make_dataset(corpus):
     #with open('characters_en.pickle', 'wb') as f:
     #    pickle.dump(en, f, pickle.HIGHEST_PROTOCOL)
 
-    with open('characters_all.pickle', 'wb') as f:
+    with open(path + 'characters_all.pickle', 'wb') as f:
         pickle.dump(both, f, pickle.HIGHEST_PROTOCOL)
 
-    with open('graphs.pickle', 'wb') as f:
+    with open(path + 'graphs.pickle', 'wb') as f:
         pickle.dump(graphs, f, pickle.HIGHEST_PROTOCOL)
 
-    with open('ner.pickle', 'wb') as f:
+    with open(path + 'ner.pickle', 'wb') as f:
         pickle.dump(n_mapper, f, pickle.HIGHEST_PROTOCOL)
 
     return sl, en, both
@@ -324,14 +328,110 @@ def eval_all_books(corpus, characters, p_p, pp_p, p_a, pp_a):
     return evals
 
 
-def draw_network():
+def draw_network(edgelist, save=False):
+    g = nx.Graph()
+    g.add_weighted_edges_from(edgelist)
 
+    pos = nx.circular_layout(g)
+    nodes = g.nodes()
+    edges = g.edges()
+    weights = [g[u][v]['weight'] for u, v in edges]
+    colors = []
+    for w in weights:
+        if w < 0:
+            colors.append('r')
+        elif w == 0:
+            colors.append('b')
+        else:
+            colors.append('g')
+
+    nx.draw_networkx_nodes(g, pos)
+    nx.draw_networkx_edges(g, pos, edgelist=edges, edge_color=colors)
+    nx.draw_networkx_labels(g, pos)
+    if save:
+        plt.savefig('plots/network.png')
+    plt.draw()
     plt.show()
+
+
+
+def draw_network_comparison(our, gold, save=False, path=None):
+    g = nx.Graph()
+    g.add_weighted_edges_from(our)
+    gg = nx.Graph()
+    gg.add_weighted_edges_from(gold)
+
+
+    nodes_g = gg.nodes()
+
+    g = nx.induced_subgraph(g, nodes_g)
+
+    pos_g = nx.circular_layout(gg)
+    pos = pos_g
+    # pos = nx.circular_layout(g)
+
+
+    edges = g.edges()
+    weights = [g[u][v]['weight'] for u, v in edges]
+    colors = []
+
+
+
+    edges_g = gg.edges()
+    edges_g = [edge for edge in edges_g if edge[0] != edge[1]]
+    weights_g = [gg[u][v]['weight'] for u, v in edges_g]
+    colors_g = []
+    for w in weights:
+        if w < 0:
+            colors.append('r')
+        elif w == 0:
+            colors.append('b')
+        else:
+            colors.append('g')
+
+    for w in weights_g:
+        if w == 'negative':
+            colors_g.append('r')
+        elif w == 'neutral':
+            colors_g.append('b')
+        else:
+            colors_g.append('g')
+
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    try:
+        nx.draw_networkx_nodes(g, pos, ax=ax1)
+    except:
+        pos = nx.circular_layout(g)
+        nx.draw_networkx_nodes(g, pos, ax=ax1)
+    nx.draw_networkx_edges(g, pos, edgelist=edges, edge_color=colors, ax=ax1)
+    nx.draw_networkx_labels(g, pos, ax=ax1)
+    nx.draw_networkx_nodes(gg, pos_g, ax=ax2)
+    nx.draw_networkx_edges(gg, pos_g, edgelist=edges_g, edge_color=colors_g, ax=ax2)
+    nx.draw_networkx_labels(gg, pos_g, ax=ax2)
+    if save:
+        plt.savefig(path)
+    plt.draw()
+    plt.show()
+
+
+
+def draw_network_comparison_all(graphs, version, save=False):
+    if save:
+        try:
+            os.mkdir('plots/' + version)
+        except:
+            print('Couldnt make dir')
+            pass
+    for g, gg, book in graphs:
+        draw_network_comparison(g, gg, save=save, path='plots/'+version+'/'+book+'.png')
+
 
 def flatten(t):
     return [item for sublist in t for item in sublist]
 
+
 def evaluate_relationships(relationships_gold, relationships, chars):
+    results = {}
     rl = []
     for r in relationships:
         if r[2] > 0:
@@ -346,6 +446,11 @@ def evaluate_relationships(relationships_gold, relationships, chars):
     correct = 0
     false = 0
     not_found = 0
+    c_p = 0
+    c_n = 0
+
+    lgp = sum([1 if r[2] == 'positive' else 0 for r in relationships_gold])
+    lgn = sum([1 if r[2] == 'negative' else 0 for r in relationships_gold])
 
     for r in rl:
         if r[0] in chars and r[1] in chars:
@@ -354,16 +459,44 @@ def evaluate_relationships(relationships_gold, relationships, chars):
                 if r[0] in g and r[1] in g:
                     if r[2] == g[2]:
                         correct += 1
+                        if r[2] == 'positive':
+                            c_p += 1
+                        elif r[2] == 'negative':
+                            c_n += 1
                     else:
                         false += 1
                 else:
                     not_found += 1
 
-    if len_pred == 0:
-        return None, None, None, None, len(relationships), len_gold
+    if len_pred == 0 or len_gold == 0 or correct == 0:
+        results['precision'] = 0
+        results['recall'] = 0
+        results['f1'] = 0
+        results['accuracy_fonly'] = f'0/{false}'
+        results['negative_relationships'] = f'0/{lgn}'
+        results['positive_relationships'] = f'0/{lgp}'
+        results['negative_relationships'] = f'0/{lgn}'
+        results['correct'] = 0
+        results['false'] = false
+        results['not_found_in_gold'] = not_found
+        results['num_predicted'] = len_pred
+        results['num_gold'] = len_gold
+    else:
+        precision = correct / len_pred
+        recall = correct / len_gold
+        results['precision'] = precision
+        results['recall'] = recall
+        results['f1'] = 2 * precision * recall / (precision + recall)
+        results['accuracy_fonly'] = f'{correct}/{correct+false}'
+        results['positive_relationships'] = f'{c_p}/{lgp}'
+        results['negative_relationships'] = f'{c_n}/{lgn}'
+        results['correct'] = correct
+        results['false'] = false
+        results['not_found_in_gold'] = not_found
+        results['num_predicted'] = len_pred
+        results['num_gold'] = len_gold
 
-
-    return correct/float(false+correct+not_found), correct/float(len_pred), correct, false, len_pred, len_gold
+    return results
 
 def get_edgelist(graph):
     edges = []
@@ -399,21 +532,75 @@ def map_ner(relationships, ner_mapper):
             res.append((x, y, r[2]))
     return res
 
+def evaluate_corpus(books):
+    results = {'relationships': {}, 'prot/ant': {}}
+
+    pr = sum([int(book['relation_eval']['positive_relationships'].split('/')[0]) for book in books])
+    nr = sum([int(book['relation_eval']['negative_relationships'].split('/')[0]) for book in books])
+    pr_a = sum([int(book['relation_eval']['positive_relationships'].split('/')[1]) for book in books])
+    nr_a = sum([int(book['relation_eval']['negative_relationships'].split('/')[1]) for book in books])
+
+    pred_all = sum([book['relation_eval']['num_predicted'] for book in books])
+    gold_all = sum([book['relation_eval']['num_gold'] for book in books])
+
+    correct = sum([book['relation_eval']['correct'] for book in books])
+    false = sum([book['relation_eval']['false'] for book in books])
+
+    if pred_all == 0 or gold_all == 0 or (pr + nr) == 0 or correct+false == 0:
+        precision = 0
+        recall = 0
+        f1 = 0
+        acc_fonly = 0
+    else:
+        precision = (pr + nr) / pred_all
+        recall = (pr + nr) / gold_all
+        f1 = 2 * precision * recall / (precision + recall)
+        acc_fonly = correct / (correct + false)
+
+    results['relationships']['accuracy_fonly'] = acc_fonly
+    results['relationships']['positive_relationships'] = f'{pr}/{pr_a}'
+    results['relationships']['negative_relationships'] = f'{nr}/{nr_a}'
+    results['relationships']['accuracy'] = (pr + nr) / float(pr_a + nr_a)
+    results['relationships']['precision'] = precision
+    results['relationships']['recall'] = recall
+    results['relationships']['f1'] = f1
+
+    return results
+
 if __name__ == '__main__':
+    FULL = True
+    path = 'pickles/svo_'
+
+    svo = True
+    verb = True  # sent only, True sentiment on verb only, False sentiment on whole sentence
+
+    MAKE_DATASET = False
+    MAKE_BOOKS = True
+    SHOW_PLOTS = False
+    SAVE_PLOTS = False
+    SAVE_CORPUS_EVAL = True
+
+    if FULL:
+        MAKE_DATASET = True
+        MAKE_BOOKS = True
+        SHOW_PLOTS = True
+        SAVE_PLOTS = True
+        SAVE_CORPUS_EVAL = True
+
+
     corpus_full = get_data("../../books/corpus.tsv", get_text=True)
     corpus_slo = [book for book in corpus_full if book.language == "slovenian"]
     corpus_eng = [book for book in corpus_full if book.language != "slovenian"]
+    if MAKE_DATASET:
+        make_dataset(corpus_full, path, svo, verb)
 
-    #make_dataset(corpus_full)
-    #exit(0)
-
-    with open('characters_all.pickle', 'rb') as f:
+    with open(path + 'characters_all.pickle', 'rb') as f:
         data_set = pickle.load(f)
 
-    with open('graphs.pickle', 'rb') as f:
+    with open(path + 'graphs.pickle', 'rb') as f:
         graphs = pickle.load(f)
 
-    with open('ner.pickle', 'rb') as f:
+    with open(path + 'ner.pickle', 'rb') as f:
         ners = pickle.load(f)
 
     corpus = corpus_full
@@ -424,43 +611,50 @@ if __name__ == '__main__':
     features = shape_features(characters)
     features_flat = np.array([item for sublist in features for item in sublist])
 
-    mapped_rels = []
-    for book in corpus:
-        relationships_mapped = [(find_char_by_id(book, relation[0]), find_char_by_id(book, relation[1]), relation[2]) for relation in book.relations]
-        mapped_rels.append(relationships_mapped)
+    if MAKE_BOOKS:
+        mapped_rels = []
+        for book in corpus:
+            relationships_mapped = [(find_char_by_id(book, relation[0]), find_char_by_id(book, relation[1]), relation[2]) for relation in book.relations]
+            mapped_rels.append(relationships_mapped)
 
-    cc = [[x.name for x in c] for c in characters]
-    books = []
-    count = 0
-    i = 0
-    for ff, book, graph, mr, ner in zip(features, corpus, graphs, mapped_rels, ners):
-        x = {}
-        x['title'] = book.title
-        x['protagonists'] = book.protagonists_names
-        x['antagonists'] = book.antagonists_names
-        x['language'] = book.language
-        temp_char = map_ner([c.name for c in book.characters], ner)
-        x['relation_eval'] = evaluate_relationships(map_ner(mr, ner), map_ner(get_edgelist(nx.Graph(graph)), ner), temp_char)
-        x['gold_relations'] = mr
-        x['graph'] = get_edgelist(nx.Graph(graph))
-        x['features'] = ff
-        x['true_labels'] = labels[count:count+len(ff)]
-        t = []
-        for j, f in enumerate(ff):
-            t.append(list(f)+list(labels[count+j]))
-        x['both'] = t
-        x['ner_mapper'] = ner
+        cc = [[x.name for x in c] for c in characters]
+        books = []
+        count = 0
+        i = 0
+        for ff, book, graph, mr, ner in zip(features, corpus, graphs, mapped_rels, ners):
+            x = {}
+            x['title'] = book.title
+            x['protagonists'] = book.protagonists_names
+            x['antagonists'] = book.antagonists_names
+            x['language'] = book.language
+            temp_char = map_ner([c.name for c in book.characters], ner)
+            x['relation_eval'] = evaluate_relationships(map_ner(mr, ner), map_ner(get_edgelist(nx.Graph(graph)), ner), temp_char)
+            x['gold_relations'] = mr
+            x['graph'] = get_edgelist(nx.Graph(graph))
+            x['features'] = ff
+            x['true_labels'] = labels[count:count+len(ff)]
+            t = []
+            for j, f in enumerate(ff):
+                t.append(list(f)+list(labels[count+j]))
+            x['both'] = t
+            x['ner_mapper'] = ner
 
-        count += len(ff)
-        i += 1
-        books.append(x)
+            count += len(ff)
+            i += 1
+            books.append(x)
 
-    #X_train, X_test, Y_train, Y_test = train_test_split(features_flat, labels, test_size=0.5, random_state=42)
+        with open(path + 'books.pickle', 'wb') as f:
+            pickle.dump(books, f)
+    else:
+        with open(path + 'books.pickle', 'rb') as f:
+            books = pickle.load(f)
+
+    #X_train, X_test, Y_train, Y_test = train_test_split(features_flat, labels, test_size=0.5, random_state=42) # split among all chars
 
     ffs = [book['features'] for book in books]
     lbs = [book['true_labels'] for book in books]
 
-    X_train, X_test, Y_train, Y_test = train_test_split(ffs, lbs, test_size=0.5, random_state=42)
+    X_train, X_test, Y_train, Y_test = train_test_split(ffs, lbs, test_size=0.5, random_state=42) # split by books
 
     books_test = [y[0][-1]for y in Y_test]
     books_train = [y[0][-1] for y in Y_train]
@@ -474,14 +668,14 @@ if __name__ == '__main__':
     cf_p_dt, cf_p_rf, cf_p_knn, cf_p_svc = train_classifiers(X_train, X_test, Y_train[:, 1], Y_test[:, 1])
     cf_dt, cf_rf, cf_knn, cf_svc = train_classifiers(X_train, X_test, Y_train[:, 2], Y_test[:, 2])
 
-    p_a, pp_a = get_predictions(cf_a_svc, X_test)
-    p_p, pp_p = get_predictions(cf_p_svc, X_test)
-    p, pp = get_predictions(cf_svc, X_test)
+    #p_a, pp_a = get_predictions(cf_a_svc, X_test)
+    #p_p, pp_p = get_predictions(cf_p_svc, X_test)
+    #p, pp = get_predictions(cf_svc, X_test)
 
-    evals_test = eval_all_books(corpus_slo, Y_test[:, 3], p_p, pp_p, p_a, pp_a)
+    #evals_test = eval_all_books(corpus_slo, Y_test[:, 3], p_p, pp_p, p_a, pp_a)
 
-    print('TEST:')
-    print(evals_test)
+    #print('TEST:')
+    #print(evals_test)
 
     p_a, pp_a = get_predictions(cf_a_svc, features_flat)
     p_p, pp_p = get_predictions(cf_p_svc, features_flat)
@@ -493,3 +687,17 @@ if __name__ == '__main__':
     print(evals_all)
 
     temp = np.concatenate((labels[:, 2:], np.reshape(p_p, (len(p_p), 1)), np.reshape(p_a, (len(p_a), 1))), axis=1)
+
+    if SHOW_PLOTS:
+        gs = []
+        for book in books:
+            gs.append((book['graph'], book['gold_relations'], book['title']))
+        draw_network_comparison_all(gs, path.split('/')[1], save=SAVE_PLOTS)
+
+    eval_corpus = evaluate_corpus(books)
+
+    if SAVE_CORPUS_EVAL:
+        with open(path + 'corpus_eval.pickle', 'wb') as f:
+            pickle.dump(eval_corpus, f)
+
+    pass
