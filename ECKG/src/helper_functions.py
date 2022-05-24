@@ -418,7 +418,7 @@ def get_relations_from_sentences_coref_sentence_sent(data: Document, ner_mapper:
                     pass
                     # print("WARNING")
         del curr_entities[-appended_words:]
-    print(pairs)
+    #print(pairs)
     return pairs
 
     pairs = []
