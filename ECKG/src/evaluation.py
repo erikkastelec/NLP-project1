@@ -5,7 +5,7 @@ import stanza
 from ECKG.src.eventify import Eventify
 from ECKG.src.helper_functions import fix_ner, deduplicate_named_entities, get_relations_from_sentences, \
     create_graph_from_pairs, graph_entity_importance_evaluation, get_entities_from_svo_triplets, find_similar, \
-    EnglishCorefPipeline, get_relations_from_sentences_coref_sentence_sent
+    EnglishCorefPipeline, get_relations_from_sentences_coref_sentence_sent, SloveneCorefPipeline
 from books.get_data import get_data, Book
 import json
 
@@ -88,12 +88,23 @@ def print_metrics(metrics):
 def evaluate_book(book: Book, pipeline, coref_pipeline, svo_extractor, cutoff=0.9, verbose=False):
     # Run text through pipeline
     data = pipeline(book.text)
-    # Fix NER anomalies
     data = fix_ner(data)
 
+    # Create coref_pipeline if Slo
+    # if book.language == "slovenian":
+    #     coref_pipeline = SloveneCorefPipeline(data)
+    #
+    # x = coref_pipeline.predict()
+    #
+    # for coreference in x["coreferences"]:
+    #     print(x["mentions"][coreference["id1"]-1])
+    #     print(x["mentions"][coreference["id2"]-1])
+    # print(x)
+    # exit()
     # Run named entity deduplication/resolution
-    deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True)
-
+    deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True, add_missed=True, book=book)
+    # data = add_missed(book, data, deduplication_mapper)
+    # deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True)
     if coref_pipeline:
         # Coreference resolution (new_chains = (word: scapy object, mentions)
         coref_pipeline.process_text(book.text)
@@ -225,7 +236,6 @@ if __name__ == "__main__":
     corpus = get_data("../../books/corpus.tsv", get_text=True)
     # sl_pipeline = classla.Pipeline("sl", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
     # sl_e = Eventify(language="sl")
-
     en_pipeline = stanza.Pipeline("en", processors='tokenize,ner, lemma, pos,mwt,  depparse', use_gpu=True)
     en_coref_pipeline = EnglishCorefPipeline()
     en_e = Eventify(language="en")

@@ -23,7 +23,7 @@ from simstring.searcher import Searcher
 from ECKG.src.SloCOREF.contextual_model_bert import ContextualControllerBERT
 from ECKG.src.SloCOREF.data import Token, Mention
 from ECKG.src.eventify import Eventify
-from books.get_data import get_data
+from books.get_data import get_data, Book
 from sentiment.sentiment_analysis import SentimentAnalysis
 from ECKG.src.SloCOREF.data import Document as Doc
 import coreferee
@@ -231,12 +231,13 @@ class EnglishCorefPipeline:
                         [self.doc[x].text for x in chain.mentions[chain.most_specific_mention_index].token_indexes])
 
                 similar = find_similar(name, dedup_keys, similarity=80)
+                if name == "cap":
+                    print("hello")
                 if similar:
                     try:
                         named_entity_chains[similar] = named_entity_chains[similar] + flatten_list(chain.mentions)
                     except KeyError:
                         named_entity_chains[similar] = flatten_list(chain.mentions)
-                        deduplication_mapper[name] = similar
                 else:
 
                     if word.tag_ == "NN" and word.text not in disregard_list:
@@ -250,6 +251,7 @@ class EnglishCorefPipeline:
         # sort dict
         new_chains_words = dict(sorted(new_chains_words.items(), key=lambda x: -x[1][1]))
         # Keep only top 10% new ones
+
         new_chains_words = keep_top_dict(new_chains_words)
         mapping_dict = {}
 
@@ -293,8 +295,6 @@ def get_relations_from_sentences(data: Document, ner_mapper: dict, coref_pipelin
                     try:
                         ssss = coref_pipeline.coref_chains.resolve(coref_pipeline.doc[id])
 
-                        print(coref_pipeline.mapping_dict[id])
-                        print(ssss)
                         tmp = coref_pipeline.mapping_dict[id]
                         sentence.words[c].text = tmp
                         # curr_entities.append(TempWord(sentence.words[c], c+1))
@@ -348,11 +348,10 @@ def get_relations_from_sentences(data: Document, ner_mapper: dict, coref_pipelin
                             if tmp1 and tmp2:
                                 pairs.append((tmp1, None, tmp2))
                 except KeyError:
-                    print('what')
                     # entity is not type PER
                     pass
                     # print("WARNING")
-    print(pairs)
+
     return pairs
 
 def get_relations_from_sentences_coref_sentence_sent(data: Document, ner_mapper: dict, sa: SentimentAnalysis,
@@ -453,10 +452,13 @@ def keep_top_dict(d, cutoff=0.9):
     names = list(d.keys())
     values_og = list(d.values())
     values = [x[1] for x in values_og]
-    values = np.array(values)
-    values = values[values > np.quantile(values, cutoff)].tolist()
-    names = names[0:len(values)]
-    values = values_og[0:len(values)]
+    try:
+        values = np.array(values)
+        values = values[values > np.quantile(values, cutoff)].tolist()
+        names = names[0:len(values)]
+        values = values_og[0:len(values)]
+    except IndexError:
+        pass
     return {k: v for k, v in zip(names, values)}
 
 
@@ -495,7 +497,7 @@ def is_similar_string(a, b, similarity=70):
     return fuzz.token_set_ratio(a, b) > similarity
 
 
-def find_similar(a, l, similarity=70):
+def find_similar(a, l, similarity=80):
     res = extract(a, l, limit=1, scorer=fuzz.token_set_ratio)
     try:
         if res[0][1] > similarity:
@@ -716,73 +718,70 @@ def group_relations(pairs):
 def flatten_list(l):
     return [j for i in l for j in i]
 
-def add_missed(data):
-    data.entities = []
-    noun_criterium = lambda word: word.xpos in ["NNP"] and word.text not in flatten_list(
-        [x.split(" ") for x in ents]) and len(
-        word.text) > 2
 
-    token_count = 0
-    for i, sentence in enumerate(data.sentences):
-        delete_list = []
-        #     start_char = None
-        #     word_text = None
-        #     sentence_len = len(sentence.words)
-        #     ents = [ent.text for ent in sentence.entities]
-        #     for j, word in enumerate(sentence.words):
-        #         # if word.text == "house" or word.text == "father":
-        #         #     print("hello")
-        #         if start_char:
-        #             if sentence_len <= j + 1 or not noun_criterium(sentence.words[j + 1]):
-        #                 data.entities.append({
-        #                     "text": word_text + " " + word.text,
-        #                     "type": "PERSON",
-        #                     "start_char": start_char,
-        #                     "end_char": word.end_char
-        #                 })
-        #                 word_text = None
-        #                 start_char = None
-        #         else:
-        #             if noun_criterium(word):
-        #                 try:
-        #                     if sentence_len > (j + 1) and noun_criterium(sentence.words[j + 1]):
-        #                         start_char = word.start_char
-        #                         word_text = word.text
-        #                     else:
-        #                         start_char = None
-        #                         word_text = None
-        #                         data.entities.append({
-        #                             "text": word.text,
-        #                             "type": "PERSON",
-        #                             "start_char": word.start_char,
-        #                             "end_char": word.end_char
-        #                         })
-        #                 except IndexError:
-        #                     print("hello")
-        for tc, token in enumerate(sentence.tokens):
-            data.sentences[i].tokens[tc].global_id = token_count
-            data.sentences[i].words[tc].global_id = token_count
-            token_count += 1
-        if len(sentence.entities) != 0:
-            for j, entity in enumerate(sentence.entities):
-                # Keep only PER entities
-                if (entity.type == "PER" or entity.type == "PERSON") and "VERB" not in [x.upos for x in entity.words]:
-                    if len(entity.words) == 1:
-                        if (entity.words[0].upos == "ADJ" or entity.words[0].upos == "VERB") and \
-                                data.sentences[i].words[
-                                    entity.words[0].head - 1].upos == "NOUN":
-                            data.sentences[i].entities[j].tokens.append(
-                                data.sentences[i].words[entity.words[0].head - 1].parent)
-                            data.sentences[i].entities[j].words.append(
-                                data.sentences[i].words[entity.words[0].head - 1])
-                    data.entities.append(data.sentences[i].entities[j])
-                else:
-                    delete_list.append(j)
-        if not len(delete_list) == 0:
-            for e in reversed(delete_list):
-                del data.sentences[i].entities[e]
-
-    return data
+# def add_missed(book: Book, data, deduplication_mapper):
+#     dedup_keys = list(set(list(deduplication_mapper.values())))
+#     data.entities = []
+#     characters = [character.sinonims for character in book.characters]
+#     for character in characters:
+#         best = None
+#         for sinonim in character:
+#             best = find_similar(sinonim, dedup_keys, similarity=90)
+#             if isinstance(best, list) and len(best) > 0:
+#                 best = best[0]
+#             if best:
+#                 break
+#         if not best:
+#             best = character[0]
+#         for sinonim in character:
+#             deduplication_mapper[sinonim] = best
+#     dedup_keys = deduplication_mapper.keys()
+#     noun_criterium = lambda word: word.xpos in ["NNP", "NN", "NNS"] and word.text not in flatten_list(
+#         [x.split(" ") for x in ents]) and len(
+#         word.text) > 2
+#
+#     token_count = 0
+#     for i, sentence in enumerate(data.sentences):
+#         delete_list = []
+#         start_char = None
+#         word_text = None
+#         sentence_len = len(sentence.words)
+#         ents = [ent.text for ent in sentence.entities]
+#         for j, word in enumerate(sentence.words):
+#             if start_char:
+#                 if sentence_len <= j + 1 or not noun_criterium(sentence.words[j + 1]):
+#                     word_text = word_text + " " + word.text
+#                     sim = find_similar(word_text, dedup_keys, similarity=90)
+#                     if sim:
+#                         data.entities.append({
+#                             "text": word_text,
+#                             "type": "PERSON",
+#                             "start_char": start_char,
+#                             "end_char": word.end_char
+#                         })
+#                     word_text = None
+#                     start_char = None
+#             else:
+#                 if noun_criterium(word):
+#                     try:
+#                         if sentence_len > (j + 1) and noun_criterium(sentence.words[j + 1]):
+#                             start_char = word.start_char
+#                             word_text = word.text
+#                         else:
+#                             start_char = None
+#                             word_text = None
+#                             sim = find_similar(word.text, dedup_keys, similarity=90)
+#                             if sim:
+#                                 data.entities.append({
+#                                     "text": word.text,
+#                                     "type": "PERSON",
+#                                     "start_char": word.start_char,
+#                                     "end_char": word.end_char
+#                                 })
+#                     except IndexError:
+#                         pass
+#
+#     return data
 
 def fix_ner(data):
     """
@@ -857,7 +856,7 @@ def fix_ner(data):
     return data
 
 
-def deduplicate_named_entities(data, map=True, count_entities=True):
+def deduplicate_named_entities(data, map=True, count_entities=True, add_missed=False, book=None):
     """
     Cleans data by removing duplicates from extracted named entities
     Args:
@@ -885,6 +884,10 @@ def deduplicate_named_entities(data, map=True, count_entities=True):
         data = data.entities
     except AttributeError:
         data = data
+    if add_missed and book:
+        for character in book.characters:
+            for sinonim in character.sinonims:
+                data.append(sinonim)
     for j, entity in enumerate(data):
         added = False
         # combine tokens (eg: "Novo", "mesto" -> "Novo mesto")
@@ -962,7 +965,7 @@ def most_frequent_item(l):
 
 
 def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper, doc=None, coref_pipeline=None):
-    dedup_keys = deduplication_mapper.keys()
+    dedup_keys = list(deduplication_mapper.keys())
     if doc:
         events = e.eventify(book.text, data=doc)
     else:
@@ -1007,6 +1010,8 @@ def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper, doc=
             if o_ok and s_ok and o_ok != s_ok:
                 event_entities.append(o_ok)
                 event_entities.append(s_ok)
+                if s_ok == "cap" or o_ok == "cap":
+                    print("hello")
                 event_tmp.append((s_ok, [x.text for x in v], o_ok))
 
     # print(NER_containing_events)
