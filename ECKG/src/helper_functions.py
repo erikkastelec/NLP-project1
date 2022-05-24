@@ -196,11 +196,14 @@ class EnglishCorefPipeline:
         #     print(t)
         #     print(self.doc[id].text)
         # if not t:
-        try:
-            t = self.mapping_dict[id]
-        except KeyError:
-            t = None
-        return t
+        if id:
+            try:
+                t = self.mapping_dict[id]
+            except KeyError:
+                t = None
+            return t
+        else:
+            return None
         # return self.coref_chains.resolve(self.doc[id])
 
     def get_proper_coref_name(self, id):
