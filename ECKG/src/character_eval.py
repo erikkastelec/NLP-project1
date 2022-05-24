@@ -6,8 +6,9 @@ import pickle
 from ECKG.src.eventify import Eventify
 from ECKG.src.helper_functions import fix_ner, deduplicate_named_entities, get_relations_from_sentences, \
     create_graph_from_pairs, graph_entity_importance_evaluation, get_entities_from_svo_triplets, find_similar, \
-    get_relations_from_sentences_sentiment, get_relations_from_sentences_sentiment_verb, group_relations_filter, create_graph_from_pairs_sentiment, group_relations, \
-    get_triads, evaluate_triads, get_entities_from_svo_triplets_sentiment
+    get_relations_from_sentences_sentiment, get_relations_from_sentences_sentiment_verb, group_relations_filter, \
+    create_graph_from_pairs_sentiment, group_relations, \
+    get_triads, evaluate_triads, get_entities_from_svo_triplets_sentiment, EnglishCorefPipeline
 from books.get_data import get_data, Book
 from ECKG.src.character import Character
 from sentiment.sentiment_analysis import *
@@ -140,16 +141,19 @@ def evaluate_book(book: Book, pipeline, sa, verb=True):
     return characters, relationship_graph, deduplication_mapper
 
 
-def evaluate_book_svo(book: Book, pipeline, svo_extractor, sa):
+def evaluate_book_svo(book: Book, pipeline, svo_extractor, sa, coref_pipeline=None):
     # Run text through pipeline
     data = pipeline(book.text)
     # Fix NER anomalies
     data = fix_ner(data)
 
     deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True)
+    coref_pipeline.process_text(book.text)
 
     entities_from_svo_triplets, svo_sentiment = get_entities_from_svo_triplets_sentiment(book, svo_extractor,
-                                                                               deduplication_mapper, sa)
+                                                                                         deduplication_mapper, sa,
+                                                                                         doc=data,
+                                                                                         coref_pipeline=coref_pipeline)
     svo_triplet_graph = create_graph_from_pairs(entities_from_svo_triplets)
     names, values = graph_entity_importance_evaluation(svo_triplet_graph)
     characters, relationship_graph = get_characters(svo_sentiment, names, book.text)
@@ -165,10 +169,12 @@ def make_dataset(corpus):
 
     # Initialize English stanza pipeline
     stanza.download("en")
-    en_pipeline = stanza.Pipeline("en", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
+    en_pipeline = stanza.Pipeline("en", processors='tokenize,ner, lemma, pos,pwt,  depparse', use_gpu=True)
     en_e = Eventify(language="en")
+    en_coref_pipeline = EnglishCorefPipeline()
 
-    job = read_lexicon_job("../../sentiment/lexicons/Slovene sentiment lexicon JOB 1.0/Slovene_sentiment_lexicon_JOB.txt")
+    job = read_lexicon_job(
+        "../../sentiment/lexicons/Slovene sentiment lexicon JOB 1.0/Slovene_sentiment_lexicon_JOB.txt")
     kss = convert_list_to_dict(
         read_lexicon_kss('../../sentiment/lexicons/Slovene sentiment lexicon KSS 1.1/')['Slolex'])
     afinn_en = read_lexicon_afinn_en("../../sentiment/lexicons/AFINN_en/AFINN-111.txt")

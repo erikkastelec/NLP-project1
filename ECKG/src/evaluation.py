@@ -93,8 +93,8 @@ def evaluate_book(book: Book, pipeline, coref_pipeline, svo_extractor, cutoff=0.
 
     if coref_pipeline:
         # Coreference resolution (new_chains = (word: scapy object, mentions)
-        coref_chains, new_chains = coref_pipeline.unify_naming_coreferee(coref_pipeline.pipeline(book.text),
-                                                                         deduplication_mapper)
+        coref_pipeline.process_text(book.text)
+        coref_chains, new_chains = coref_pipeline.unify_naming_coreferee(deduplication_mapper)
 
         # Set count of named entities to number of coreference mentions
         for key, value in coref_chains.items():
@@ -165,7 +165,8 @@ def evaluate_book(book: Book, pipeline, coref_pipeline, svo_extractor, cutoff=0.
 
     # 3. IMPORTANCE BASED ON GRAPH CENTRALITIES, WHERE GRAPH IS CONSTRUCTED FROM ENTITY CO-OCCURRENCES IN THE SVO TRIPLET
     try:
-        entities_from_svo_triplets = get_entities_from_svo_triplets(book, svo_extractor, deduplication_mapper, doc=data)
+        entities_from_svo_triplets = get_entities_from_svo_triplets(book, svo_extractor, deduplication_mapper, doc=data,
+                                                                    coref_pipeline=coref_pipeline)
         svo_triplet_graph = create_graph_from_pairs(entities_from_svo_triplets)
 
         names, values = graph_entity_importance_evaluation(svo_triplet_graph)
@@ -217,9 +218,10 @@ def evaluate_all(corpus_path="../../books/corpus.tsv"):
 if __name__ == "__main__":
     corpus = get_data("../../books/corpus.tsv", get_text=True)
     # sl_pipeline = classla.Pipeline("sl", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
+    # sl_e = Eventify(language="sl")
+
     en_pipeline = stanza.Pipeline("en", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
     en_coref_pipeline = EnglishCorefPipeline()
-    # sl_e = Eventify(language="sl")
     en_e = Eventify(language="en")
     slo_books = []
 
