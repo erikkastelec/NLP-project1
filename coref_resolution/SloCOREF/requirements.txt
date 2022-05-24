@@ -1,9 +1,0 @@
-lxml==4.6.4
-beautifulsoup4==4.10.0
-numpy==1.21.4
-scikit-learn==1.0.1
-torch==1.10.0+cpu
-neleval==3.1.1
-pyjarowinkler==1.8
-allennlp==2.8.0
-transformers==4.12.5

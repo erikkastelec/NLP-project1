@@ -18,15 +18,13 @@ from simstring.feature_extractor.character_ngram import CharacterNgramFeatureExt
 from simstring.measure.cosine import CosineMeasure
 from simstring.searcher import Searcher
 
-from ECKG.src.contextual_model_bert import ContextualControllerBERT
-from ECKG.src.data import Token, Mention
+from ECKG.src.SloCOREF.contextual_model_bert import ContextualControllerBERT
+from ECKG.src.SloCOREF.data import Token, Mention
 from ECKG.src.eventify import Eventify
 from books.get_data import get_data
 from sentiment.sentiment_analysis import SentimentAnalysis
 
 import coreferee
-
-COREF_MODEL_PATH = ""
 
 
 def list_to_string(l):
@@ -43,8 +41,13 @@ def list_to_string(l):
     return s
 
 
+"""
+Coreference pipeline class. Modified from: https://github.com/RSDO-DS3/SloCOREF
+"""
+
+
 class SloveneCorefPipeline:
-    def __init__(self, coref_model_path, doc: Document, pipeline):
+    def __init__(self, doc: Document, pipeline, coref_model_path="../SloCOREF_contextual_model_bert/bert_model"):
         self.doc = doc
         self.pipeline = pipeline
         self.coref_model = ContextualControllerBERT.from_pretrained(coref_model_path)
