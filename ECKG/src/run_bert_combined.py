@@ -1,13 +1,14 @@
 import logging
 import sys
 
-import numpy as np
 import torch
 from sklearn.model_selection import KFold
 
 from contextual_model_bert import ContextualControllerBERT, parser
-from data import read_corpus
 from utils import fixed_split, KFoldStateCache, split_into_sets
+import numpy as np
+
+from ECKG.src.data import read_corpus
 
 DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 parser.add_argument("--source_dataset", type=str, default="senticoref")
@@ -26,7 +27,6 @@ if __name__ == "__main__":
     src_docs = read_corpus(args.source_dataset)
     tgt_docs = read_corpus(args.target_dataset)
 
-
     def create_model_instance(model_name, **override_kwargs):
         return ContextualControllerBERT(model_name=model_name,
                                         fc_hidden_size=override_kwargs.get("fc_hidden_size", args.fc_hidden_size),
@@ -42,7 +42,6 @@ if __name__ == "__main__":
                                         dataset_name=override_kwargs.get("dataset", args.target_dataset),
                                         freeze_pretrained=override_kwargs.get("freeze_pretrained",
                                                                               args.freeze_pretrained))
-
 
     if args.target_dataset == "coref149":
         INNER_K, OUTER_K = 3, 10

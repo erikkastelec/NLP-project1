@@ -13,7 +13,7 @@ from sklearn.model_selection import KFold
 from transformers import BertModel, BertTokenizer
 
 from common import ControllerBase, NeuralCoreferencePairScorer
-from data import read_corpus, Document
+from ECKG.src.data import read_corpus, Document
 from utils import split_into_sets, fixed_split, KFoldStateCache
 
 parser = argparse.ArgumentParser()
@@ -32,6 +32,7 @@ parser.add_argument("--freeze_pretrained", action="store_true", help="If set, di
 parser.add_argument("--random_seed", type=int, default=13)
 parser.add_argument("--fixed_split", action="store_true")
 parser.add_argument("--kfold_state_cache_path", type=str, default=None)
+
 
 DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
@@ -409,7 +410,7 @@ class ContextualControllerBERT(ControllerBase):
             self.optimizer.step()
             self.optimizer.zero_grad()
 
-        return preds, (float(doc_loss), n_examples)  # , probs
+        return preds, (float(doc_loss), n_examples), probs
 
 
 if __name__ == "__main__":
@@ -419,7 +420,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     documents = read_corpus(args.dataset)
-
 
     def create_model_instance(model_name, **override_kwargs):
         return ContextualControllerBERT(model_name=model_name,
@@ -436,7 +436,6 @@ if __name__ == "__main__":
                                         dataset_name=override_kwargs.get("dataset", args.dataset),
                                         freeze_pretrained=override_kwargs.get("freeze_pretrained",
                                                                               args.freeze_pretrained))
-
 
     # Train model
     if args.dataset == "coref149":

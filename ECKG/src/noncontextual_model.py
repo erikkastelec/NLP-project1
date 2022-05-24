@@ -13,7 +13,7 @@ import torch.optim as optim
 from sklearn.model_selection import KFold
 
 from common import ControllerBase, NeuralCoreferencePairScorer
-from data import read_corpus, Document
+from ECKG.src.data import read_corpus, Document
 from utils import extract_vocab, split_into_sets, fixed_split
 
 parser = argparse.ArgumentParser()
@@ -36,6 +36,7 @@ parser.add_argument("--embedding_size", type=int, default=None,
 parser.add_argument("--freeze_pretrained", action="store_true")
 parser.add_argument("--random_seed", type=int, default=13)
 parser.add_argument("--fixed_split", action="store_true")
+
 
 logging.basicConfig(level=logging.INFO)
 DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -469,7 +470,6 @@ if __name__ == "__main__":
     else:
         assert args.embedding_size is not None
 
-
     def create_model_instance(model_name, **override_kwargs):
         used_embedding_type = override_kwargs.get("use_pretrained_embs", args.use_pretrained_embs)
         used_embs = override_kwargs.get("pretrained_embs",
@@ -486,7 +486,6 @@ if __name__ == "__main__":
                                        freeze_pretrained=override_kwargs.get("freeze_pretrained",
                                                                              args.freeze_pretrained),
                                        dataset_name=override_kwargs.get("dataset", args.dataset))
-
 
     # Train model
     if args.dataset == "coref149":
@@ -552,3 +551,4 @@ if __name__ == "__main__":
 
         model.evaluate(test_docs)
         model.visualize()
+

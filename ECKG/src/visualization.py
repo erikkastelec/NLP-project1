@@ -1,11 +1,9 @@
-import ast
-import os
-import webbrowser
-
-from bs4 import BeautifulSoup
-
 import random
-from data import COREF149_DIR, SENTICOREF_DIR, read_senticoref_doc
+import webbrowser
+import os
+import ast
+from bs4 import BeautifulSoup
+from ECKG.src.data import COREF149_DIR, SENTICOREF_DIR, read_senticoref_doc
 
 VISUAL_FILE_NAME = 'visualization.html'
 current_directory = os.getcwd()
@@ -132,6 +130,7 @@ def get_compared(parsed_doc, parsed_preds, doc_id):
 
 
 def get_compared_senticoref(parsed_doc, parsed_preds, doc_id):
+
     # Prepare dictionaries for predictions
     color_by_cluster_id = {}
     color_by_mention_prediction = {}
@@ -236,7 +235,6 @@ def get_compared_senticoref(parsed_doc, parsed_preds, doc_id):
         </script>
         """
 
-
 def parse_document_senticoref(document_name):
     file_path = os.path.join(SENTICOREF_DIR, document_name + ".tsv")
     return read_senticoref_doc(file_path)
@@ -287,6 +285,7 @@ def get_document_predictions(test_preds_file, database_name):
         else:
             parsed_doc = parse_document_senticoref(document)
             text = get_compared_senticoref(parsed_doc, parsed_preds, i)
+
 
         tab_id = "id" + str(i)
         ul_elements += f"""<li class="nav-item"><a class="nav-link" href="#{tab_id}" data-toggle="tab">{document}</a></li>"""

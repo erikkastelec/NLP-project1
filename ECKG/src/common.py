@@ -2,12 +2,12 @@ import logging
 import os
 import time
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from tqdm import tqdm
 
 import metrics
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 from utils import get_clusters
 from visualization import build_and_display
 
@@ -90,12 +90,7 @@ class ControllerBase:
             for idx_doc in tqdm(shuffle_indices):
                 curr_doc = train_docs[idx_doc]
 
-                res = self._train_doc(curr_doc)
-                # Some models additionally return probas, some do not
-                if len(res) == 3:
-                    _, (doc_loss, n_examples), _ = self._train_doc(curr_doc)
-                else:
-                    _, (doc_loss, n_examples) = self._train_doc(curr_doc)
+                _, (doc_loss, n_examples) = self._train_doc(curr_doc)
 
                 train_loss += doc_loss
                 train_examples += n_examples
@@ -103,12 +98,7 @@ class ControllerBase:
             self.eval_mode()
             dev_loss, dev_examples = 0.0, 0
             for curr_doc in dev_docs:
-                res = self._train_doc(curr_doc, eval_mode=True)
-                # Some models additionally return probas, some do not
-                if len(res) == 3:
-                    _, (doc_loss, n_examples), _ = self._train_doc(curr_doc)
-                else:
-                    _, (doc_loss, n_examples) = self._train_doc(curr_doc)
+                _, (doc_loss, n_examples) = self._train_doc(curr_doc, eval_mode=True)
 
                 dev_loss += doc_loss
                 dev_examples += n_examples
@@ -148,14 +138,7 @@ class ControllerBase:
         # doc_name: <cluster assignments> pairs for all test documents
         logging.info("Evaluating a single document...")
 
-        res = self._train_doc(document, eval_mode=True)
-
-        # Some models additionally return probas, some do not
-        if len(res) == 3:
-            predictions, _, probabilities = res
-        else:
-            predictions, _ = res
-
+        predictions, _, probabilities = self._train_doc(document, eval_mode=True)
         clusters = get_clusters(predictions)
         scores = {m: probabilities[m] for m in clusters.keys()}
 

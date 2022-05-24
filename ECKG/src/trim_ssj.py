@@ -1,9 +1,8 @@
 """ Remove documents from SSJ500k which are not used in coref149 - to reduce file reading time. """
 
-import argparse
 import logging
+import argparse
 import os
-
 from bs4 import BeautifulSoup
 
 parser = argparse.ArgumentParser(description="Remove unneeded documents from ssj500k")

@@ -5,17 +5,18 @@ import os
 from collections import Counter
 from copy import deepcopy
 
+from sklearn.model_selection import KFold
+
+import metrics
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from pyjarowinkler import distance as jwdistance
-from sklearn.model_selection import KFold
-
-import metrics
-from common import ControllerBase
-from data import read_corpus
 from utils import split_into_sets, fixed_split
+from common import ControllerBase
+
+from ECKG.src.data import read_corpus
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--model_name", type=str, default="baseline_senticoref_coref149")
@@ -25,7 +26,9 @@ parser.add_argument("--dataset", type=str, default="senticoref")  # {'senticoref
 parser.add_argument("--random_seed", type=int, default=13)
 parser.add_argument("--fixed_split", action="store_true")
 
+
 logging.basicConfig(level=logging.INFO)
+
 
 RANDOM_SEED = None
 if RANDOM_SEED:
@@ -529,7 +532,6 @@ if __name__ == "__main__":
                                   model_name=model_name,
                                   learning_rate=override_kwargs.get("learning_rate", args.learning_rate),
                                   dataset_name=override_kwargs.get("dataset", args.dataset))
-
 
     # Train model
     if args.dataset == "coref149":

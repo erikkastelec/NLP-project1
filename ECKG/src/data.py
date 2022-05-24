@@ -1,9 +1,9 @@
-import csv
-import logging
 import os
+import logging
+import csv
+import pandas as pd
 from collections import OrderedDict
 
-import pandas as pd
 from bs4 import BeautifulSoup
 
 DUMMY_ANTECEDENT = None
@@ -15,7 +15,7 @@ DUMMY_ANTECEDENT = None
 # Use path "../data/*" if you are running from src folder, i.e. (cd src) and then (python baseline.py)
 COREF149_DIR = os.environ.get("COREF149_DIR", "../data/coref149")
 SENTICOREF_DIR = os.environ.get("SENTICOREF149_DIR", "../data/senticoref1_0")
-SENTICOREF_METADATA_DIR = "../data/senticoref_pos_stanza"
+SENTICOREF_METADATA_DIR = "../../coref_resolution/SloCOREF/data/senticoref_pos_stanza"
 SSJ_PATH = os.environ.get("SSJ_PATH", "../data/ssj500k-sl.TEI/ssj500k-sl.body.reduced.xml")
 
 
@@ -105,10 +105,9 @@ class Token:
         self.position_in_sentence = position_in_sentence
         self.position_in_document = position_in_document
 
-        if msd is not None:
-            self.gender = self._extract_gender(msd)
-            self.number = self._extract_number(msd)
-            self.category = msd[0]
+        self.gender = self._extract_gender(msd)
+        self.number = self._extract_number(msd)
+        self.category = msd[0]
 
     def __str__(self):
         return f"Token(\"{self.raw_text}\")"
@@ -185,95 +184,6 @@ def sorted_mentions_dict(mentions):
     return sorted_mentions
 
 
-def read_senticoref_doc(file_path):
-    # Temporary cluster representation:
-    # {cluster1 index: { mention1_idx: ['mention1', 'tokens'], mention2_idx: [...] }, cluster2_idx: {...} }
-    _clusters = {}
-    # Temporary buffer for current sentence
-    _curr_sent = []
-
-    sents = []
-    id_to_tok = {}
-    tok_to_position = {}
-    idx_sent, idx_inside_sent = 0, 0
-    mentions, clusters = {}, []
-
-    doc_id = file_path.split(os.path.sep)[-1][:-4]  # = file name without ".tsv"
-    # Note: `quoting=csv.QUOTE_NONE` is required as otherwise some documents can't be read
-    # Note: `keep_default_na=False` is required as there's a typo in corpus ("NA"), interpreted as <missing>
-    curr_annotations = pd.read_table(file_path, comment="#", sep="\t", index_col=False, quoting=csv.QUOTE_NONE,
-                                     names=["token_index", "start_end", "token", "NamedEntity", "Polarity",
-                                            "referenceRelation", "referenceType"], keep_default_na=False)
-    curr_metadata = pd.read_table(os.path.join(SENTICOREF_METADATA_DIR, f"{doc_id}.tsv"), sep="\t", index_col=False,
-                                  quoting=csv.QUOTE_NONE, header=0, keep_default_na=False)
-
-    metadata = {"tokens": {}}
-    for i, (tok_id, ref_info, token) in enumerate(
-            curr_annotations[["token_index", "referenceRelation", "token"]].values):
-        # Token is part of some mention
-        if ref_info != "_":
-            # Token can be part of multiple mentions
-            ref_annotations = ref_info.split("|")
-
-            for mention_info in ref_annotations:
-                cluster_idx, mention_idx = list(map(int, mention_info[3:].split("-")))  # skip "*->"
-
-                curr_mentions = _clusters.get(cluster_idx, {})
-                curr_mention_tok_ids = curr_mentions.get(mention_idx, [])
-                curr_mention_tok_ids.append(tok_id)
-                curr_mentions[mention_idx] = curr_mention_tok_ids
-
-                _clusters[cluster_idx] = curr_mentions
-
-        _curr_sent.append(tok_id)
-        tok_to_position[tok_id] = [idx_sent, idx_inside_sent]
-        id_to_tok[tok_id] = token
-        idx_inside_sent += 1
-
-        text, pos_tag, lemma = curr_metadata.iloc[i].values
-        metadata["tokens"][tok_id] = {"ana": pos_tag, "lemma": lemma, "text": text}
-
-        # Segment sentences heuristically
-        if token in {".", "!", "?"}:
-            idx_sent += 1
-            idx_inside_sent = 0
-            sents.append(_curr_sent)
-            _curr_sent = []
-
-    # If the document doesn't end with proper punctuation
-    if len(_curr_sent) > 0:
-        sents.append(_curr_sent)
-
-    # --- generate token objects
-    final_tokens = OrderedDict()
-    for index, (tok_id, tok_raw) in enumerate(id_to_tok.items()):
-        final_tokens[tok_id] = Token(
-            tok_id,
-            tok_raw,
-            metadata["tokens"][tok_id]["lemma"] if "lemma" in metadata["tokens"][tok_id] else None,
-            metadata["tokens"][tok_id]["ana"].split(":")[1],
-            tok_to_position[tok_id][0],
-            tok_to_position[tok_id][1],
-            index
-        )
-    # ---
-
-    mention_counter = 0
-    for idx_cluster, curr_mentions in _clusters.items():
-        curr_cluster = []
-        for idx_mention, mention_tok_ids in curr_mentions.items():
-            # assign coref149-style IDs to mentions
-            mention_id = f"rc_{mention_counter}"
-            mention_tokens = list(map(lambda tok_id: final_tokens[tok_id], mention_tok_ids))
-            mentions[mention_id] = Mention(mention_id, mention_tokens)
-
-            curr_cluster.append(mention_id)
-            mention_counter += 1
-        clusters.append(curr_cluster)
-
-    return Document(doc_id, final_tokens, sents, sorted_mentions_dict(mentions), clusters, metadata=metadata)
-
-
 def read_classla(doc):
     # Temporary cluster representation:
     # {cluster1 index: { mention1_idx: ['mention1', 'tokens'], mention2_idx: [...] }, cluster2_idx: {...} }
@@ -340,6 +250,94 @@ def read_classla(doc):
         id_to_tok[tok_id] = token
         idx_inside_sent += 1
         metadata["tokens"][tok_id] = {"ana": pos_tag, "lemma": lemma, "text": token}
+
+        # Segment sentences heuristically
+        if token in {".", "!", "?"}:
+            idx_sent += 1
+            idx_inside_sent = 0
+            sents.append(_curr_sent)
+            _curr_sent = []
+
+    # If the document doesn't end with proper punctuation
+    if len(_curr_sent) > 0:
+        sents.append(_curr_sent)
+
+    # --- generate token objects
+    final_tokens = OrderedDict()
+    for index, (tok_id, tok_raw) in enumerate(id_to_tok.items()):
+        final_tokens[tok_id] = Token(
+            tok_id,
+            tok_raw,
+            metadata["tokens"][tok_id]["lemma"] if "lemma" in metadata["tokens"][tok_id] else None,
+            metadata["tokens"][tok_id]["ana"].split(":")[1],
+            tok_to_position[tok_id][0],
+            tok_to_position[tok_id][1],
+            index
+        )
+    # ---
+
+    mention_counter = 0
+    for idx_cluster, curr_mentions in _clusters.items():
+        curr_cluster = []
+        for idx_mention, mention_tok_ids in curr_mentions.items():
+            # assign coref149-style IDs to mentions
+            mention_id = f"rc_{mention_counter}"
+            mention_tokens = list(map(lambda tok_id: final_tokens[tok_id], mention_tok_ids))
+            mentions[mention_id] = Mention(mention_id, mention_tokens)
+
+            curr_cluster.append(mention_id)
+            mention_counter += 1
+        clusters.append(curr_cluster)
+
+    return Document(doc_id, final_tokens, sents, sorted_mentions_dict(mentions), clusters, metadata=metadata)
+
+def read_senticoref_doc(file_path):
+    # Temporary cluster representation:
+    # {cluster1 index: { mention1_idx: ['mention1', 'tokens'], mention2_idx: [...] }, cluster2_idx: {...} }
+    _clusters = {}
+    # Temporary buffer for current sentence
+    _curr_sent = []
+
+    sents = []
+    id_to_tok = {}
+    tok_to_position = {}
+    idx_sent, idx_inside_sent = 0, 0
+    mentions, clusters = {}, []
+
+    doc_id = file_path.split(os.path.sep)[-1][:-4]  # = file name without ".tsv"
+    # Note: `quoting=csv.QUOTE_NONE` is required as otherwise some documents can't be read
+    # Note: `keep_default_na=False` is required as there's a typo in corpus ("NA"), interpreted as <missing>
+    curr_annotations = pd.read_table(file_path, comment="#", sep="\t", index_col=False, quoting=csv.QUOTE_NONE,
+                                     names=["token_index", "start_end", "token", "NamedEntity", "Polarity",
+                                            "referenceRelation", "referenceType"], keep_default_na=False)
+    curr_metadata = pd.read_table(os.path.join(SENTICOREF_METADATA_DIR, f"{doc_id}.tsv"), sep="\t", index_col=False,
+                                  quoting=csv.QUOTE_NONE, header=0, keep_default_na=False)
+
+    metadata = {"tokens": {}}
+    for i, (tok_id, ref_info, token) in enumerate(
+            curr_annotations[["token_index", "referenceRelation", "token"]].values):
+        # Token is part of some mention
+        if ref_info != "_":
+            # Token can be part of multiple mentions
+            ref_annotations = ref_info.split("|")
+
+            for mention_info in ref_annotations:
+                cluster_idx, mention_idx = list(map(int, mention_info[3:].split("-")))  # skip "*->"
+
+                curr_mentions = _clusters.get(cluster_idx, {})
+                curr_mention_tok_ids = curr_mentions.get(mention_idx, [])
+                curr_mention_tok_ids.append(tok_id)
+                curr_mentions[mention_idx] = curr_mention_tok_ids
+
+                _clusters[cluster_idx] = curr_mentions
+
+        _curr_sent.append(tok_id)
+        tok_to_position[tok_id] = [idx_sent, idx_inside_sent]
+        id_to_tok[tok_id] = token
+        idx_inside_sent += 1
+
+        text, pos_tag, lemma = curr_metadata.iloc[i].values
+        metadata["tokens"][tok_id] = {"ana": pos_tag, "lemma": lemma, "text": text}
 
         # Segment sentences heuristically
         if token in {".", "!", "?"}:
@@ -544,3 +542,4 @@ if __name__ == "__main__":
         print("\nrazdalja_med_zaporednima_omenitvama_iste_entitete,frekvenca")
         for curr_dist, num_mentions in sorted(dist_between_mentions.items(), key=lambda tup: tup[0]):
             print(f"{curr_dist},{num_mentions}")
+

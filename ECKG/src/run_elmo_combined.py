@@ -6,12 +6,13 @@ import torch
 from sklearn.model_selection import KFold
 
 from contextual_model_elmo import ContextualControllerELMo, parser
-from data import read_corpus
+from ECKG.src.data import read_corpus
 from utils import fixed_split, split_into_sets, KFoldStateCache
 
 DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 parser.add_argument("--source_dataset", type=str, default="coref149")
 parser.add_argument("--target_dataset", type=str, default="senticoref")
+
 
 if __name__ == "__main__":
     logger = logging.getLogger()
@@ -25,7 +26,6 @@ if __name__ == "__main__":
 
     src_docs = read_corpus(args.source_dataset)
     tgt_docs = read_corpus(args.target_dataset)
-
 
     def create_model_instance(model_name, **override_kwargs):
         _model = ContextualControllerELMo(model_name=model_name,
@@ -42,7 +42,6 @@ if __name__ == "__main__":
                                               "lr_embedder": 10e-4} if not args.freeze_pretrained else None,
                                           dataset_name=args.target_dataset)
         return _model
-
 
     if args.target_dataset == "coref149":
         INNER_K, OUTER_K = 3, 10

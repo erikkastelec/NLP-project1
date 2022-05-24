@@ -1,10 +1,11 @@
 import json
+from collections import Counter
 import logging
 import os
-from collections import Counter
 from typing import List, Optional, Mapping
 
 from sklearn.model_selection import train_test_split
+
 
 PAD_TOKEN, PAD_ID = "<PAD>", 0
 BOS_TOKEN, BOS_ID = "<BOS>", 1
@@ -138,7 +139,7 @@ def split_into_sets(documents, train_prop=0.7, dev_prop=0.15, test_prop=0.15):
 
 
 def fixed_split(documents, dataset):
-    tr, dev, te = read_splits(os.path.join("..", "data", "seeded_split", f"{dataset}.txt"))
+    tr, dev, te = read_splits(os.path.join("../../coref_resolution/SloCOREF", "data", "seeded_split", f"{dataset}.txt"))
     assert (len(tr) + len(dev) + len(te)) == len(documents)
 
     train_docs = list(filter(lambda doc: doc.doc_id in tr, documents))

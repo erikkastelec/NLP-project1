@@ -18,11 +18,15 @@ from simstring.feature_extractor.character_ngram import CharacterNgramFeatureExt
 from simstring.measure.cosine import CosineMeasure
 from simstring.searcher import Searcher
 
+from ECKG.src.contextual_model_bert import ContextualControllerBERT
+from ECKG.src.data import Token, Mention
 from ECKG.src.eventify import Eventify
 from books.get_data import get_data
 from sentiment.sentiment_analysis import SentimentAnalysis
 
 import coreferee
+
+COREF_MODEL_PATH = ""
 
 
 def list_to_string(l):
@@ -37,6 +41,130 @@ def list_to_string(l):
         except TypeError:
             print("hello")
     return s
+
+
+class SloveneCorefPipeline:
+    def __init__(self, coref_model_path, doc: Document, pipeline):
+        self.doc = doc
+        self.pipeline = pipeline
+        self.coref_model = ContextualControllerBERT.from_pretrained(coref_model_path)
+        self.coref_model.eval_mode()
+
+    def classla_output_to_coref_input(self):
+        # Transforms CLASSLA's output into a form that can be fed into coref model.
+        output_tokens = {}
+        output_sentences = []
+        output_mentions = {}
+        output_clusters = []
+
+        str_document = self.doc.text
+        start_char = 0
+        MENTION_MSD = {"N", "V", "R", "P"}  # noun, verb, adverb, pronoun
+
+        current_mention_id = 1
+        token_index_in_document = 0
+        for sentence_index, input_sentence in enumerate(self.doc.sentences):
+            output_sentence = []
+            mention_tokens = []
+            for token_index_in_sentence, input_token in enumerate(input_sentence.tokens):
+                input_word = input_token.words[0]
+                output_token = Token(str(sentence_index) + "-" + str(token_index_in_sentence),
+                                     input_word.text,
+                                     input_word.lemma,
+                                     input_word.xpos,
+                                     sentence_index,
+                                     token_index_in_sentence,
+                                     token_index_in_document)
+
+                # FIXME: This is a possibly inefficient way of finding start_char of a word. Stanza has this functionality
+                #  implemented, Classla unfortunately does not, so we resort to a hack
+                new_start_char = str_document.find(input_word.text, start_char)
+                output_token.start_char = new_start_char
+                if new_start_char != -1:
+                    start_char = new_start_char
+
+                if len(mention_tokens) > 0 and mention_tokens[0].msd[0] != output_token.msd[0]:
+                    output_mentions[current_mention_id] = Mention(current_mention_id, mention_tokens)
+                    output_clusters.append([current_mention_id])
+                    mention_tokens = []
+                    current_mention_id += 1
+
+                # Simplistic mention detection: consider nouns, verbs, adverbs and pronouns as mentions
+                if output_token.msd[0] in MENTION_MSD:
+                    mention_tokens.append(output_token)
+
+                output_tokens[output_token.token_id] = output_token
+                output_sentence.append(output_token.token_id)
+                token_index_in_document += 1
+
+            # Handle possible leftover mention tokens at end of sentence
+            if len(mention_tokens) > 0:
+                output_mentions[current_mention_id] = Mention(current_mention_id, mention_tokens)
+                output_clusters.append([current_mention_id])
+                mention_tokens = []
+                current_mention_id += 1
+
+            output_sentences.append(output_sentence)
+
+        return Document(1, output_tokens, output_sentences, output_mentions, output_clusters)
+
+    def predict(self, threshold, return_singletons):
+        # 1. re-format classla_output into coref_input (incl. mention detection)
+        coref_input = self.classla_output_to_coref_input()
+
+        # 2. process prepared input with coref
+        coref_output = self.coref_model.evaluate_single(coref_input)
+
+        # 4. prepare response (mentions + coreferences)
+        coreferences = []
+        coreferenced_mentions = set()
+        for id2, id1s in coref_output["predictions"].items():
+            if id2 is not None:
+                for id1 in id1s:
+                    mention_score = coref_output["scores"][id1]
+
+                    if threshold is not None and mention_score < threshold:
+                        continue
+
+                    coreferenced_mentions.add(id1)
+                    coreferenced_mentions.add(id2)
+
+                    coreferences.append({
+                        "id1": int(id1),
+                        "id2": int(id2),
+                        "score": mention_score
+                    })
+
+        mentions = []
+        for mention in coref_input.mentions.values():
+            [sentence_id, token_id] = [int(idx) for idx in mention.tokens[0].token_id.split("-")]
+            mention_score = coref_output["scores"][mention.mention_id]
+
+            if return_singletons is False and mention.mention_id not in coreferenced_mentions:
+                continue
+
+            # while this is technically already filtered with coreferenced_mentions, singleton mentions aren't, but they
+            # have some score too that can be thresholded.
+            # if req_body.threshold is not None and mention_score < req_body.threshold:
+            #    continue
+
+            mention_raw_text = " ".join([t.raw_text for t in mention.tokens])
+            mentions.append(
+                {
+                    "id": mention.mention_id,
+                    "start_idx": mention.tokens[0].start_char,
+                    "length": len(mention_raw_text),
+                    "ner_type": self.doc.sentences[sentence_id].tokens[token_id].ner.replace("B-", "").replace(
+                        "I-", ""),
+                    "msd": mention.tokens[0].msd,
+                    "text": mention_raw_text
+                }
+            )
+
+        return {
+            "mentions": mentions,
+            "coreferences": sorted(coreferences, key=lambda x: x["id1"])
+        }
 
 
 class EnglishCorefPipeline:
@@ -673,7 +801,6 @@ def get_entities_from_svo_triplets_sentiment(book, e: Eventify, deduplication_ma
         relations.append((NER_containing_events[x][0], sa.get_sentiment_word(NER_containing_events[x][1]),
                           NER_containing_events[x][2]))
     return NER_containing_events, relations
-
 
 
 def remove_from_list(list, unwanted_indexes):

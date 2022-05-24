@@ -1,12 +1,11 @@
-import logging
-
-import numpy as np
 import torch
 from sklearn.model_selection import KFold
 
 from baseline import BaselineController, MentionPairFeatures, parser
-from data import read_corpus
+from ECKG.src.data import read_corpus
 from utils import fixed_split, KFoldStateCache, split_into_sets
+import logging
+import numpy as np
 
 parser.add_argument("--source_dataset", type=str, default="senticoref")  # {'senticoref', 'coref149'}
 parser.add_argument("--target_dataset", type=str, default="coref149")  # {'senticoref', 'coref149'}
@@ -27,7 +26,6 @@ if __name__ == "__main__":
 
     src_docs = read_corpus(args.source_dataset)
     tgt_docs = read_corpus(args.target_dataset)
-
 
     def create_model_instance(model_name, **override_kwargs):
         return BaselineController(MentionPairFeatures.num_features(),

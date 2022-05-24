@@ -6,7 +6,7 @@ from fastapi import Body, FastAPI
 from pydantic import BaseModel
 
 from contextual_model_bert import ContextualControllerBERT
-from data import Document, Token, Mention
+from ECKG.src.data import Document, Token, Mention
 
 
 def classla_output_to_coref_input(classla_output):

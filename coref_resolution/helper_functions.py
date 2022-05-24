@@ -1,8 +1,6 @@
-import os
 import classla
-from typing import Optional
-from SloCOREF.src.data import Document, Token, Mention
-from SloCOREF.src.contextual_model_bert import ContextualControllerBERT
+from ECKG.src.data import Document, Token, Mention
+from ECKG.src.contextual_model_bert import ContextualControllerBERT
 
 
 def classla_output_to_coref_input(classla_output):
