@@ -1,3 +1,4 @@
+import copy
 import errno
 import os
 import pickle
@@ -11,6 +12,7 @@ import networkx as nx
 import numpy as np
 import spacy
 from classla import Document
+from classla.models.common.doc import Word
 from fuzzywuzzy import fuzz
 from fuzzywuzzy.process import extract
 from simstring.database.dict import DictDatabase
@@ -25,6 +27,9 @@ from books.get_data import get_data
 from sentiment.sentiment_analysis import SentimentAnalysis
 
 import coreferee
+
+OBJECT_DEPS = {"dobj", "dative", "attr", "oprd"}
+SUBJECT_DEPS = {"nsubj", "nsubjpass", "csubj", "agent", "expl"}
 
 
 def list_to_string(l):
@@ -172,6 +177,7 @@ class SloveneCorefPipeline:
 
 class EnglishCorefPipeline:
     def __init__(self):
+        "python -m spacy download en_core_web_trf "
         nlp = spacy.load("en_core_web_trf")
         nlp.add_pipe('coreferee')
         self.pipeline = nlp
@@ -196,6 +202,9 @@ class EnglishCorefPipeline:
             t = None
         return t
         # return self.coref_chains.resolve(self.doc[id])
+
+    def get_proper_coref_name(self, id):
+        return self.rules_analyzer.get_propn_subtree(self.doc[id])
 
     def unify_naming_coreferee(self, deduplication_mapper):
         if not self.doc:
@@ -223,6 +232,7 @@ class EnglishCorefPipeline:
                         named_entity_chains[similar] = named_entity_chains[similar] + flatten_list(chain.mentions)
                     except KeyError:
                         named_entity_chains[similar] = flatten_list(chain.mentions)
+                        deduplication_mapper[name] = similar
                 else:
 
                     if word.tag_ == "NN" and word.text not in disregard_list:
@@ -247,9 +257,192 @@ class EnglishCorefPipeline:
         for key, value in named_entity_chains.items():
             for x in value:
                 mapping_dict[x] = key
+            deduplication_mapper[key] = key
         self.mapping_dict = mapping_dict
 
         return named_entity_chains, new_chains_words
+
+
+def get_relations_from_sentences(data: Document, ner_mapper: dict, coref_pipeline=None):
+    """
+    Find pairs of entities, which co-occur in the same sentence.
+    Returns:
+        list of entity verb entity pairs
+    """
+
+    class TempWord:
+        def __init__(self, word: Word, id):
+            self.words = [word]
+            self.id = id
+
+    pairs = []
+    dedup_keys = ner_mapper.keys()
+    id_count = 0
+    # data = copy.deepcopy(data)
+    for i, sentence in enumerate(data.sentences):
+        og_len = len(sentence.entities)
+        curr_entities = sentence.entities
+        named_entity_word_ids = [x.id - 1 for x in flatten_list([y.words for y in sentence.entities])]
+        if coref_pipeline:
+            for c, id in enumerate(range(id_count, id_count + len(sentence.words))):
+                if c not in named_entity_word_ids:
+                    try:
+                        ssss = coref_pipeline.coref_chains.resolve(coref_pipeline.doc[id])
+
+                        print(coref_pipeline.mapping_dict[id])
+                        print(ssss)
+                        tmp = coref_pipeline.mapping_dict[id]
+                        sentence.words[c].text = tmp
+                        # curr_entities.append(TempWord(sentence.words[c], c+1))
+                        if ssss:
+                            for ss in ssss:
+                                curr_entities.append(ss)
+                    except KeyError:
+                        pass
+
+            id_count += len(sentence.words)
+        if len(curr_entities) > 1:
+            curr_words = []
+            verbs = []
+            for j, entity in enumerate(curr_entities):
+                curr_words.append(entity)
+            for w in sentence.words:
+                if w.upos == "VERB":
+                    verbs.append((w.text, w.id))
+            for x, y in combinations(curr_words, 2):
+                try:
+                    appended = False
+                    # for verb in verbs:
+                    #     if min(x.words[0].id, y.words[0].id) < verb[1] < max(x.words[-1].id, y.words[-1].id):
+                    #         appended = True
+                    #         pairs.append((ner_mapper[list_to_string([a.text for a in x.words])], verb[0], ner_mapper[list_to_string([a.text for a in y.words])]))
+                    if entity_text_string(x) != entity_text_string(y):
+
+                        try:
+                            x_heads = []
+                            for w in x.words:
+                                if sentence.words[w.head - 1].upos == "VERB":
+                                    x_heads.append(w.head)
+                            for w in y.words:
+                                if w.head in x_heads:
+                                    appended = True
+                                    pairs.append((ner_mapper[entity_text_string(x)], sentence.words[w.head - 1].text,
+                                                  ner_mapper[entity_text_string(y)]))
+                        except Exception:
+                            pass
+                        if not appended:
+                            tmp1 = entity_text_string(x)
+                            tmp2 = entity_text_string(y)
+                            try:
+                                tmp1 = ner_mapper[tmp1]
+                            except KeyError:
+                                tmp1 = find_similar(tmp1, dedup_keys, similarity=80)
+                            try:
+                                tmp2 = ner_mapper[tmp2]
+                            except KeyError:
+                                tmp2 = find_similar(tmp2, dedup_keys, similarity=80)
+                            if tmp1 and tmp2:
+                                pairs.append((tmp1, None, tmp2))
+                except KeyError:
+                    print('what')
+                    # entity is not type PER
+                    pass
+                    # print("WARNING")
+    print(pairs)
+    return pairs
+
+
+def get_relations_from_sentences_coref_sentence_sent(data: Document, ner_mapper: dict, coref_pipeline=None):
+    """
+    Find pairs of entities, which co-occur in the same sentence.
+    Returns:
+        list of entity verb entity pairs
+    """
+
+    class TempWord:
+        def __init__(self, word: Word, id):
+            self.words = [word]
+            self.id = id
+
+    pairs = []
+    dedup_keys = ner_mapper.keys()
+    id_count = 0
+    # data = copy.deepcopy(data)
+
+    for i, sentence in enumerate(data.sentences):
+        appended_words = 0
+        og_len = len(sentence.entities)
+        curr_entities = sentence.entities
+        named_entity_word_ids = [x.id - 1 for x in flatten_list([y.words for y in sentence.entities])]
+        if coref_pipeline:
+            for c, id in enumerate(range(id_count, id_count + len(sentence.words))):
+                if c not in named_entity_word_ids:
+                    try:
+                        ssss = coref_pipeline.coref_chains.resolve(coref_pipeline.doc[id])
+
+                        print(coref_pipeline.mapping_dict[id])
+                        print(ssss)
+                        tmp = coref_pipeline.mapping_dict[id]
+                        sentence.words[c].text = tmp
+                        # curr_entities.append(TempWord(sentence.words[c], c+1))
+                        if ssss:
+                            for ss in ssss:
+                                curr_entities.append(ss)
+                    except KeyError:
+                        pass
+
+            id_count += len(sentence.words)
+        if len(curr_entities) > 1:
+
+            for x, y in combinations(curr_entities, 2):
+                word_list = [word.lemma for word in sentence.words]
+                mask_list = []
+                try:
+                    tmp1 = entity_text_string(x)
+                    tmp2 = entity_text_string(y)
+                    try:
+                        tmp1 = ner_mapper[tmp1]
+                    except KeyError:
+                        tmp1 = find_similar(tmp1, dedup_keys, similarity=80)
+                    try:
+                        tmp2 = ner_mapper[tmp2]
+                    except KeyError:
+                        tmp2 = find_similar(tmp2, dedup_keys, similarity=80)
+                    if tmp1 and tmp2:
+                        pairs.append((tmp1, None, tmp2))
+
+                except KeyError:
+                    # entity is not type PER
+                    pass
+                    # print("WARNING")
+    print(pairs)
+    return pairs
+
+    pairs = []
+    for i, sentence in enumerate(data.sentences):
+        if len(sentence.entities) > 1:
+            curr_words = []
+            for j, entity in enumerate(sentence.entities):
+                curr_words.append(" ".join(x.text for x in entity.words))
+            for x, y in combinations(curr_words, 2):
+                try:
+                    ner_x = ner_mapper[x]
+                    ner_y = ner_mapper[y]
+                    word_list = [word.lemma for word in sentence.words]
+                    mask_list = []
+                    try:
+                        index_x = word_list.index(x)
+                        index_y = word_list.index(y)
+                        mask_list.append(index_x)
+                        mask_list.append(index_y)
+                    except ValueError:
+                        print("word not found")
+                    sentiment = sa.get_sentiment_sentence(word_list, mask_list)
+                    pairs.append((ner_x, sentiment, ner_y))
+
+                except KeyError:
+                    pass
+    return pairs
 
 
 def keep_top_dict(d, cutoff=0.9):
@@ -394,55 +587,10 @@ def evaluate_triads(triads):
 
 
 def entity_text_string(a):
+    if isinstance(a, spacy.tokens.token.Token):
+        return a.text
     return " ".join(x.text for x in a.words)
 
-
-def get_relations_from_sentences(data: Document, ner_mapper: dict, coref_pipeline=None):
-    """
-    Find pairs of entities, which co-occur in the same sentence.
-    Returns:
-        list of entity verb entity pairs
-    """
-    pairs = []
-    for i, sentence in enumerate(data.sentences):
-        if coref_pipeline:
-
-            curr_entities = sentence.entities
-            for word in sentence.words:
-                print("hello")
-        if len(sentence.entities) > 1:
-            curr_words = []
-            verbs = []
-            for j, entity in enumerate(sentence.entities):
-                curr_words.append(entity)
-            for w in sentence.words:
-                if w.upos == "VERB":
-                    verbs.append((w.text, w.id))
-            for x, y in combinations(curr_words, 2):
-                try:
-                    appended = False
-                    # for verb in verbs:
-                    #     if min(x[1], y[1]) < verb[1] < max(x[1], y[1]):
-                    #         appended = True
-                    #         pairs.append((ner_mapper[x[0]], verb[0], ner_mapper[y[0]]))
-                    #         break
-                    x_heads = []
-                    for w in x.words:
-                        if sentence.words[w.head - 1].upos == "VERB":
-                            x_heads.append(w.head)
-                    for w in y.words:
-                        if w.head in x_heads:
-                            appended = True
-                            pairs.append((ner_mapper[entity_text_string(x)], sentence.words[w.head - 1].text,
-                                          ner_mapper[entity_text_string(y)]))
-                    if not appended:
-                        pairs.append((ner_mapper[entity_text_string(x)], None, ner_mapper[entity_text_string(y)]))
-                except KeyError:
-                    # entity is not type PER
-                    pass
-                    # print("WARNING")
-
-    return pairs
 
 
 def get_relations_from_sentences_sentiment(data: Document, ner_mapper: dict, sa: SentimentAnalysis):
@@ -669,7 +817,6 @@ def deduplicate_named_entities(data, map=True, count_entities=True):
     for j, entity in enumerate(data):
         added = False
         # combine tokens (eg: "Novo", "mesto" -> "Novo mesto")
-
         try:
             name = " ".join([x.text for x in entity.tokens])
         except Exception:

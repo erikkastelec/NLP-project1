@@ -143,16 +143,16 @@ def evaluate_book(book: Book, pipeline, sa, verb=True):
 
 def evaluate_book_svo(book: Book, pipeline, svo_extractor, sa, coref_pipeline=None):
     # Run text through pipeline
-    data = pipeline(book.text)
+    data_og = pipeline(book.text)
     # Fix NER anomalies
-    data = fix_ner(data)
+    data = fix_ner(data_og)
 
     deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True)
     coref_pipeline.process_text(book.text)
 
     entities_from_svo_triplets, svo_sentiment = get_entities_from_svo_triplets_sentiment(book, svo_extractor,
                                                                                          deduplication_mapper, sa,
-                                                                                         doc=data,
+                                                                                         doc=data_og,
                                                                                          coref_pipeline=coref_pipeline)
     svo_triplet_graph = create_graph_from_pairs(entities_from_svo_triplets)
     names, values = graph_entity_importance_evaluation(svo_triplet_graph)
