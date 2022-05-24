@@ -978,8 +978,8 @@ def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper, doc=
             print("hello")
         s_sim = find_similar(list_to_string([x.text for x in s]), dedup_keys)
         o_sim = find_similar(list_to_string([x.text for x in o]), dedup_keys)
-        s_sim = deduplication_mapper(s_sim)
-        o_sim = deduplication_mapper(o_sim)
+        s_sim = deduplication_mapper[s_sim]
+        o_sim = deduplication_mapper[o_sim]
         if s_sim is not None and o_sim is not None:
             # s.text = deduplication_mapper[s_sim]
             # o.text = deduplication_mapper[o_sim]
