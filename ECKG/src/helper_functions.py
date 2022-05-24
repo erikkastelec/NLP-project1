@@ -978,9 +978,9 @@ def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper, doc=
             print("hello")
         s_sim = find_similar(list_to_string([x.text for x in s]), dedup_keys)
         o_sim = find_similar(list_to_string([x.text for x in o]), dedup_keys)
-        s_sim = deduplication_mapper[s_sim]
-        o_sim = deduplication_mapper[o_sim]
         if s_sim is not None and o_sim is not None:
+            s_sim = deduplication_mapper[s_sim]
+            o_sim = deduplication_mapper[o_sim]
             # s.text = deduplication_mapper[s_sim]
             # o.text = deduplication_mapper[o_sim]
             NER_containing_events.append((s_sim, list_to_string([x.text for x in v]), o_sim))
@@ -993,6 +993,7 @@ def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper, doc=
                 if cor_s:
                     s_ok = cor_s
             else:
+                s_sim = deduplication_mapper[s_sim]
                 s_ok = s_sim
 
             if not o_sim:
@@ -1000,6 +1001,7 @@ def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper, doc=
                 if cor_o:
                     o_ok = cor_o
             else:
+                o_sim = deduplication_mapper[o_sim]
                 o_ok = o_sim
 
             # if cor_o:
