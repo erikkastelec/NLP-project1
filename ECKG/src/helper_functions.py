@@ -716,6 +716,73 @@ def group_relations(pairs):
 def flatten_list(l):
     return [j for i in l for j in i]
 
+def add_missed(data):
+    data.entities = []
+    noun_criterium = lambda word: word.xpos in ["NNP"] and word.text not in flatten_list(
+        [x.split(" ") for x in ents]) and len(
+        word.text) > 2
+
+    token_count = 0
+    for i, sentence in enumerate(data.sentences):
+        delete_list = []
+        #     start_char = None
+        #     word_text = None
+        #     sentence_len = len(sentence.words)
+        #     ents = [ent.text for ent in sentence.entities]
+        #     for j, word in enumerate(sentence.words):
+        #         # if word.text == "house" or word.text == "father":
+        #         #     print("hello")
+        #         if start_char:
+        #             if sentence_len <= j + 1 or not noun_criterium(sentence.words[j + 1]):
+        #                 data.entities.append({
+        #                     "text": word_text + " " + word.text,
+        #                     "type": "PERSON",
+        #                     "start_char": start_char,
+        #                     "end_char": word.end_char
+        #                 })
+        #                 word_text = None
+        #                 start_char = None
+        #         else:
+        #             if noun_criterium(word):
+        #                 try:
+        #                     if sentence_len > (j + 1) and noun_criterium(sentence.words[j + 1]):
+        #                         start_char = word.start_char
+        #                         word_text = word.text
+        #                     else:
+        #                         start_char = None
+        #                         word_text = None
+        #                         data.entities.append({
+        #                             "text": word.text,
+        #                             "type": "PERSON",
+        #                             "start_char": word.start_char,
+        #                             "end_char": word.end_char
+        #                         })
+        #                 except IndexError:
+        #                     print("hello")
+        for tc, token in enumerate(sentence.tokens):
+            data.sentences[i].tokens[tc].global_id = token_count
+            data.sentences[i].words[tc].global_id = token_count
+            token_count += 1
+        if len(sentence.entities) != 0:
+            for j, entity in enumerate(sentence.entities):
+                # Keep only PER entities
+                if (entity.type == "PER" or entity.type == "PERSON") and "VERB" not in [x.upos for x in entity.words]:
+                    if len(entity.words) == 1:
+                        if (entity.words[0].upos == "ADJ" or entity.words[0].upos == "VERB") and \
+                                data.sentences[i].words[
+                                    entity.words[0].head - 1].upos == "NOUN":
+                            data.sentences[i].entities[j].tokens.append(
+                                data.sentences[i].words[entity.words[0].head - 1].parent)
+                            data.sentences[i].entities[j].words.append(
+                                data.sentences[i].words[entity.words[0].head - 1])
+                    data.entities.append(data.sentences[i].entities[j])
+                else:
+                    delete_list.append(j)
+        if not len(delete_list) == 0:
+            for e in reversed(delete_list):
+                del data.sentences[i].entities[e]
+
+    return data
 
 def fix_ner(data):
     """
