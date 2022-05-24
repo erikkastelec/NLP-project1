@@ -25,7 +25,7 @@ from ECKG.src.SloCOREF.data import Token, Mention
 from ECKG.src.eventify import Eventify
 from books.get_data import get_data
 from sentiment.sentiment_analysis import SentimentAnalysis
-
+from ECKG.src.SloCOREF.data import Document as Doc
 import coreferee
 
 OBJECT_DEPS = {"dobj", "dative", "attr", "oprd"}
@@ -52,9 +52,9 @@ Coreference pipeline class. Modified from: https://github.com/RSDO-DS3/SloCOREF
 
 
 class SloveneCorefPipeline:
-    def __init__(self, doc: Document, pipeline, coref_model_path="../SloCOREF_contextual_model_bert/bert_model"):
-        self.doc = doc
-        self.pipeline = pipeline
+    def __init__(self, doc: Document, coref_model_path="../SloCOREF_contextual_model_bert/bert_model"):
+        self.doc = doc  # Classla documents
+        # self.pipeline = pipeline
         self.coref_model = ContextualControllerBERT.from_pretrained(coref_model_path)
         self.coref_model.eval_mode()
 
@@ -114,9 +114,9 @@ class SloveneCorefPipeline:
 
             output_sentences.append(output_sentence)
 
-        return Document(1, output_tokens, output_sentences, output_mentions, output_clusters)
+        return Doc(1, output_tokens, output_sentences, output_mentions, output_clusters)
 
-    def predict(self, threshold, return_singletons):
+    def predict(self, threshold=0.2, return_singletons=False):
         # 1. re-format classla_output into coref_input (incl. mention detection)
         coref_input = self.classla_output_to_coref_input()
 
@@ -143,6 +143,7 @@ class SloveneCorefPipeline:
                         "score": mention_score
                     })
 
+        print("test")
         mentions = []
         for mention in coref_input.mentions.values():
             [sentence_id, token_id] = [int(idx) for idx in mention.tokens[0].token_id.split("-")]
@@ -155,7 +156,7 @@ class SloveneCorefPipeline:
             # have some score too that can be thresholded.
             # if req_body.threshold is not None and mention_score < req_body.threshold:
             #    continue
-
+            print("test")
             mention_raw_text = " ".join([t.raw_text for t in mention.tokens])
             mentions.append(
                 {
