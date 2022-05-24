@@ -1,0 +1,7 @@
+Database: senticoref
+
+Test scores:
+MUC:      prec=0.820, rec=0.840, f1=0.827
+BCubed:   prec=0.770, rec=0.837, f1=0.799
+CEAFe:    prec=0.833, rec=0.785, f1=0.806
+CoNLL-12: prec=0.808, rec=0.821, f1=0.811
