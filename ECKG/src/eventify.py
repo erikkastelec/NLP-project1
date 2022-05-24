@@ -1,4 +1,5 @@
 """
+ORIGINAL CODE FROM: https://github.com/ana3A/EEG_Model
 Eventify class used for extracting events / SVO triplets from text using stanza/classla dependency parsing
 """
 
@@ -70,20 +71,20 @@ class Eventify:
 
     def mountEvent(self, event, doc, sent_idx):
         if event[0]:
-            if self.mode != 'string':
+            if self.mode == 'string':
                 subjects = self.getSubjectString(event[0])
             else:
                 subjects = self.getSubjectStanzaTokens(event[0], doc, sent_idx)
         else:
             subjects = [self.empty_token]
 
-        if self.mode != 'string':
+        if self.mode == 'string':
             predicate, prepositions = self.getActionString(event[1], doc, sent_idx)
         else:
             predicate, prepositions = self.getActionStanzaTokens(event[1], doc, sent_idx)
 
         if event[2]:
-            if self.mode != 'string':
+            if self.mode == 'string':
                 objects = self.getObjectString(event[2], prepositions, doc, sent_idx)
             else:
                 objects = self.getObjectStanzaTokens(event[2], prepositions, doc, sent_idx)

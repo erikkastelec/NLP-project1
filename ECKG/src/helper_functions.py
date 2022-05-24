@@ -24,6 +24,7 @@ from sentiment.sentiment_analysis import SentimentAnalysis
 
 import coreferee
 
+
 def list_to_string(l):
     s = ""
     try:
@@ -44,11 +45,34 @@ class EnglishCorefPipeline:
         nlp.add_pipe('coreferee')
         self.pipeline = nlp
         self.rules_analyzer = nlp.get_pipe('coreferee').annotator.rules_analyzer
+        self.doc = None
+        self.coref_chains = None
+        self.mapping_dict = None
+        self.new_entity_names = None
 
-    def unify_naming_coreferee(self, doc, deduplication_mapper):
+    def process_text(self, text):
+        self.doc = self.pipeline(text)
+
+    def resolve_coref(self, id):
+        # t = find_similar(self.doc[id].text, self.new_entity_names)
+        # if t:
+        #     print(t)
+        #     print(self.doc[id].text)
+        # if not t:
+        try:
+            t = self.mapping_dict[id]
+        except KeyError:
+            t = None
+        return t
+        # return self.coref_chains.resolve(self.doc[id])
+
+    def unify_naming_coreferee(self, deduplication_mapper):
+        if not self.doc:
+            raise Exception("No text has been processed. (call process_text(text))")
         dedup_keys = deduplication_mapper.keys()
         disregard_list = ["man", "woman", "name", ]
-        chains = doc._.coref_chains
+        chains = self.doc._.coref_chains
+        self.coref_chains = chains
         named_entity_chains = {}
         new_chains = {}
         # (spacy word, count)
@@ -56,11 +80,11 @@ class EnglishCorefPipeline:
 
         for chain in chains:
             if len(chain.mentions[chain.most_specific_mention_index]) == 1:
-                word = doc[chain.mentions[chain.most_specific_mention_index].root_index]
+                word = self.doc[chain.mentions[chain.most_specific_mention_index].root_index]
                 name = list_to_string([x.text for x in self.rules_analyzer.get_propn_subtree(word)])
                 if isinstance(name, str) and name == "":
                     name = list_to_string(
-                        [doc[x].text for x in chain.mentions[chain.most_specific_mention_index].token_indexes])
+                        [self.doc[x].text for x in chain.mentions[chain.most_specific_mention_index].token_indexes])
 
                 similar = find_similar(name, dedup_keys, similarity=80)
                 if similar:
@@ -75,7 +99,6 @@ class EnglishCorefPipeline:
                             new_chains_words[name] = (new_chains_words[name][0], new_chains_words[name][1] + 1)
                             new_chains[name] = new_chains[name] + flatten_list(chain.mentions)
                         except KeyError:
-                            print(name)
                             new_chains_words[name] = (word, 1)
                             new_chains[name] = flatten_list(chain.mentions)
 
@@ -83,8 +106,18 @@ class EnglishCorefPipeline:
         new_chains_words = dict(sorted(new_chains_words.items(), key=lambda x: -x[1][1]))
         # Keep only top 10% new ones
         new_chains_words = keep_top_dict(new_chains_words)
+        mapping_dict = {}
+
         for key, value in new_chains_words.items():
             new_chains_words[key] = (value[0], new_chains[key])
+            for x in new_chains[key]:
+                mapping_dict[x] = key
+        self.new_entity_names = new_chains_words.keys()
+        for key, value in named_entity_chains.items():
+            for x in value:
+                mapping_dict[x] = key
+        self.mapping_dict = mapping_dict
+
         return named_entity_chains, new_chains_words
 
 
@@ -310,6 +343,7 @@ def get_relations_from_sentences_sentiment(data: Document, ner_mapper: dict, sa:
                     pass
     return pairs
 
+
 def get_relations_from_sentences_sentiment_verb(data: Document, ner_mapper: dict, sa: SentimentAnalysis):
     """
     Find pairs of entities, which co-occur in the same sentence and attach sentiment.
@@ -351,7 +385,7 @@ def get_relations_from_sentences_sentiment_verb(data: Document, ner_mapper: dict
                             mask_list.append(index_x)
                             mask_list.append(index_y)
                         except ValueError:
-                            #print("word not found")
+                            # print("word not found")
                             pass
                         sentiment = sa.get_sentiment_sentence(word_list, mask_list)
                         pairs.append((ner_mapper[entity_text_string(x)], sentiment, ner_mapper[entity_text_string(y)]))
@@ -396,7 +430,6 @@ def flatten_list(l):
     return [j for i in l for j in i]
 
 
-
 def fix_ner(data):
     """
     Fixes common problems with NER (detecting only ADJ and not noun after it)
@@ -407,6 +440,7 @@ def fix_ner(data):
         [x.split(" ") for x in ents]) and len(
         word.text) > 2
 
+    token_count = 0
     for i, sentence in enumerate(data.sentences):
         delete_list = []
         #     start_char = None
@@ -443,7 +477,10 @@ def fix_ner(data):
         #                         })
         #                 except IndexError:
         #                     print("hello")
-
+        for tc, token in enumerate(sentence.tokens):
+            data.sentences[i].tokens[tc].global_id = token_count
+            data.sentences[i].words[tc].global_id = token_count
+            token_count += 1
         if len(sentence.entities) != 0:
             for j, entity in enumerate(sentence.entities):
                 # Keep only PER entities
@@ -571,88 +608,72 @@ def most_frequent_item(l):
     return num
 
 
-def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper, doc=None):
+def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper, doc=None, coref_pipeline=None):
     dedup_keys = deduplication_mapper.keys()
     if doc:
         events = e.eventify(book.text, data=doc)
     else:
         events = e.eventify(book.text)
     NER_containing_events = []
-    event_entity_count = {}
     event_entities = []
     event_tmp = []
     for s, v, o in events:
-        if isinstance(s, tuple) or isinstance(o, tuple):
+        if isinstance(s, tuple) or isinstance(o, tuple) or s == '<|EMPTY|>' or o == '<|EMPTY|>':
             continue
-        s_sim = find_similar(s, dedup_keys)
-        o_sim = find_similar(o, dedup_keys)
+
+        s_sim = find_similar(list_to_string([x.text for x in s]), dedup_keys)
+        o_sim = find_similar(list_to_string([x.text for x in o]), dedup_keys)
         if s_sim is not None and o_sim is not None:
-            s = deduplication_mapper[s_sim]
-            o = deduplication_mapper[o_sim]
-            NER_containing_events.append((s, v, o))
+            # s.text = deduplication_mapper[s_sim]
+            # o.text = deduplication_mapper[o_sim]
+            NER_containing_events.append((s_sim, list_to_string([x.text for x in v]), o_sim))
 
-        elif s != '<|EMPTY|>' and o != '<|EMPTY|>' and len(s.split()) < 3 and len(o.split()) < 3 and (
-                s_sim is not None or o_sim is not None):
-            event_entities.append(o)
-            event_entities.append(s)
-            try:
-                event_entity_count[s] += 1
-            except KeyError:
-                event_entity_count[s] = 1
-            try:
-                event_entity_count[o] += 1
-            except KeyError:
-                event_entity_count[o] = 1
-            # event_tmp.append((s, v, o))
+        elif len(s) < 3 and len(o) < 3:
+            s_ok = None
+            o_ok = None
+            if not s_sim:
+                cor_s = coref_pipeline.resolve_coref(s[0].global_id)
+                if cor_s:
+                    s_ok = cor_s
+            else:
+                s_ok = s_sim
 
+            if not o_sim:
+                cor_o = coref_pipeline.resolve_coref(o[0].global_id)
+                if cor_o:
+                    o_ok = cor_o
+            else:
+                o_ok = o_sim
+
+            # if cor_o:
+            #     print("og: " + list_to_string([x.text for x in o]))
+            #     print(cor_o)
+            # if cor_s:
+            #     print("og: " + list_to_string([x.text for x in s]))
+            #     print(cor_s)
+            if o_ok and s_ok and o_ok != s_ok:
+                event_entities.append(o_ok)
+                event_entities.append(s_ok)
+                event_tmp.append((s_ok, [x.text for x in v], o_ok))
+
+    # print(NER_containing_events)
     deduplication_mapper, count = deduplicate_named_entities(event_entities, count_entities=True)
     for s, v, o in event_tmp:
         NER_containing_events.append((deduplication_mapper[s], v, deduplication_mapper[o]))
-
+    # print(NER_containing_events)
     return NER_containing_events
 
 
-def get_entities_from_svo_triplets_sentiment(book, e: Eventify, deduplication_mapper, sa: SentimentAnalysis):
-    dedup_keys = deduplication_mapper.keys()
-    events = e.eventify(book.text)
-    NER_containing_events = []
+def get_entities_from_svo_triplets_sentiment(book, e: Eventify, deduplication_mapper, sa: SentimentAnalysis, doc=None,
+                                             coref_pipeline=None):
+    NER_containing_events = get_entities_from_svo_triplets(book, e, deduplication_mapper, doc=doc,
+                                                           coref_pipeline=coref_pipeline)
     relations = []
-    event_entity_count = {}
-    event_entities = []
-    event_tmp = []
-    for s, v, o in events:
-        if isinstance(s, tuple) or isinstance(o, tuple):
-            continue
-        s_sim = find_similar(s, dedup_keys)
-        o_sim = find_similar(o, dedup_keys)
-        if s_sim is not None and o_sim is not None:
-            s = deduplication_mapper[s_sim]
-            o = deduplication_mapper[o_sim]
-            NER_containing_events.append((s, v, o))
-            sentiment = sa.get_sentiment_word(v)
-            relations.append((deduplication_mapper[s], sentiment, deduplication_mapper[o]))
-
-        elif s != '<|EMPTY|>' and o != '<|EMPTY|>' and len(s.split()) < 3 and len(o.split()) < 3 and (
-                s_sim is not None or o_sim is not None):
-            event_entities.append(o)
-            event_entities.append(s)
-            try:
-                event_entity_count[s] += 1
-            except KeyError:
-                event_entity_count[s] = 1
-            try:
-                event_entity_count[o] += 1
-            except KeyError:
-                event_entity_count[o] = 1
-            # event_tmp.append((s, v, o))
-
-    deduplication_mapper, count = deduplicate_named_entities(event_entities, count_entities=True)
-    for s, v, o in event_tmp:
-        NER_containing_events.append((deduplication_mapper[s], v, deduplication_mapper[o]))
-        sentiment = sa.get_sentiment_word(v)
-        relations.append((deduplication_mapper[s], sentiment, deduplication_mapper[o]))
-
+    for x in range(0, len(NER_containing_events)):
+        relations.append((NER_containing_events[x][0], sa.get_sentiment_word(NER_containing_events[x][1]),
+                          NER_containing_events[x][2]))
     return NER_containing_events, relations
+
 
 
 def remove_from_list(list, unwanted_indexes):
