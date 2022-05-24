@@ -8,7 +8,12 @@ class SentimentAnalysis:
     def get_sentiment_word(self, word):
         if word is None:
             return 0
-        wl = word.lower()
+        if word is list:
+            return self.get_sentiment_sentence(word, [])
+        try:
+            wl = word.lower()
+        except AttributeError:
+            wl = word[0].lower()
         if wl in self.lexicon:
             return self.lexicon[wl]
         else:
@@ -22,6 +27,8 @@ class SentimentAnalysis:
                 continue
             sum_sen += self.get_sentiment_word(word)
             counter += 1
+        if counter == 0:
+            return 0
         return sum_sen / float(counter)
 
 

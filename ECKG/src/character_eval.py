@@ -3,13 +3,16 @@ import numpy as np
 import stanza
 import pickle
 import os
+from tqdm import tqdm
+import sys
 
 from ECKG.src.eventify import Eventify
 from ECKG.src.helper_functions import fix_ner, deduplicate_named_entities, get_relations_from_sentences, \
     create_graph_from_pairs, graph_entity_importance_evaluation, get_entities_from_svo_triplets, find_similar, \
     get_relations_from_sentences_sentiment, get_relations_from_sentences_sentiment_verb, group_relations_filter, \
     create_graph_from_pairs_sentiment, group_relations, \
-    get_triads, evaluate_triads, get_entities_from_svo_triplets_sentiment, EnglishCorefPipeline
+    get_triads, evaluate_triads, get_entities_from_svo_triplets_sentiment, EnglishCorefPipeline, \
+    get_relations_from_sentences_coref_sentence_sent
 from books.get_data import get_data, Book
 from ECKG.src.character import Character
 from sentiment.sentiment_analysis import *
@@ -119,7 +122,7 @@ def get_characters(sentiment_pairs, names, text):
     return characters, relationship_graph
 
 
-def evaluate_book(book: Book, pipeline, sa, verb=True):
+def evaluate_book(book: Book, pipeline, sa, coref_pipeline=None, verb=True):
     # Run text through pipeline
     data = pipeline(book.text)
     # Fix NER anomalies
@@ -127,10 +130,15 @@ def evaluate_book(book: Book, pipeline, sa, verb=True):
 
     deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True)
 
+    if coref_pipeline:
+        coref_pipeline.process_text(book.text)
+        coref_chains, new_chains = coref_pipeline.unify_naming_coreferee(deduplication_mapper)
+
     if verb:
         sentence_relations = get_relations_from_sentences_sentiment_verb(data, deduplication_mapper, sa)
     else:
-        sentence_relations = get_relations_from_sentences_sentiment(data, deduplication_mapper, sa)
+        #sentence_relations = get_relations_from_sentences_sentiment(data, deduplication_mapper, sa)
+        sentence_relations = get_relations_from_sentences_coref_sentence_sent(data, deduplication_mapper, sa, coref_pipeline)
     graph = create_graph_from_pairs(sentence_relations)
 
     if len(graph.nodes) == 0:
@@ -144,16 +152,19 @@ def evaluate_book(book: Book, pipeline, sa, verb=True):
 
 def evaluate_book_svo(book: Book, pipeline, svo_extractor, sa, coref_pipeline=None):
     # Run text through pipeline
-    data_og = pipeline(book.text)
+    data = pipeline(book.text)
     # Fix NER anomalies
-    data = fix_ner(data_og)
+    data = fix_ner(data)
 
     deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True)
-    coref_pipeline.process_text(book.text)
+
+    if coref_pipeline:
+        coref_pipeline.process_text(book.text)
+        coref_chains, new_chains = coref_pipeline.unify_naming_coreferee(deduplication_mapper)
 
     entities_from_svo_triplets, svo_sentiment = get_entities_from_svo_triplets_sentiment(book, svo_extractor,
                                                                                          deduplication_mapper, sa,
-                                                                                         doc=data_og,
+                                                                                         doc=data,
                                                                                          coref_pipeline=coref_pipeline)
     svo_triplet_graph = create_graph_from_pairs(entities_from_svo_triplets)
     names, values = graph_entity_importance_evaluation(svo_triplet_graph)
@@ -196,21 +207,22 @@ def make_dataset(corpus, path, svo, verb):
     graphs = []
     n_mapper = []
 
-    for book in corpus:
+    for book in tqdm(corpus, total=len(corpus), file=sys.stdout):
+        print(book.title)
         if book.language == "slovenian":
             if svo:
-                characters, graph, ner_mapper = evaluate_book_svo(book, sl_pipeline, sl_e, sa_kss) # TODO sl coref pipeline
+                characters, graph, ner_mapper = evaluate_book_svo(book, sl_pipeline, sl_e, sa_kss, coref_pipeline=None) # TODO sl coref pipeline
             else:
-                characters, graph, ner_mapper = evaluate_book(book, sl_pipeline, sa_kss, verb)
+                characters, graph, ner_mapper = evaluate_book(book, sl_pipeline, sa_kss, coref_pipeline=None, verb=verb)
             sl.append(characters)
             both.append(characters)
             graphs.append(graph)
             n_mapper.append(ner_mapper)
         else:
             if svo:
-                characters, graph, ner_mapper = evaluate_book_svo(book, sl_pipeline, en_e, sa_kss, en_coref_pipeline)
+                characters, graph, ner_mapper = evaluate_book_svo(book, en_pipeline, en_e, sa_swn, coref_pipeline=en_coref_pipeline)
             else:
-                characters, graph, ner_mapper = evaluate_book(book, en_pipeline, sa_swn, verb)
+                characters, graph, ner_mapper = evaluate_book(book, en_pipeline, sa_swn, coref_pipeline=en_coref_pipeline, verb=verb)
             en.append(characters)
             both.append(characters)
             graphs.append(graph)
@@ -532,6 +544,53 @@ def map_ner(relationships, ner_mapper):
             res.append((x, y, r[2]))
     return res
 
+def eval_book_prediction(book):
+    results = {}
+
+    prot_gold = book.protagonists_names
+    ant_gold = book.antagonists_names
+
+    predicted_prot = []
+    predicted_ant = []
+
+    len_p_gold = len(prot_gold)
+    len_p_pred = len(predicted_prot)
+    p_c = 0
+
+    for p in prot_gold:
+        if p in predicted_prot:
+            p_c += 1
+    p_f = len_p_pred - p_c
+    p_fn = len_p_gold - p_c
+
+    len_a_gold = len(ant_gold)
+    len_a_pred = len(predicted_ant)
+    a_c = 0
+
+    for a in ant_gold:
+        if a in predicted_ant:
+            a_c += 1
+    a_f = len_a_pred - a_c
+    a_fn = len_a_gold - a_c
+
+    results['both_correct'] = p_c + a_c
+    results['both_false'] = p_f + a_f
+    results['both_fn'] = p_fn + a_fn
+
+    results['protagonist_correct'] = p_c
+    results['protagonist_false'] = p_f
+    results['protagonist_fn'] = p_fn
+    results['protagonists'] = prot_gold
+    results['protagonists_predicted'] = predicted_prot
+
+    results['antagonist_correct'] = a_c
+    results['antagonist_false'] = a_f
+    results['antagonist_fn'] = a_fn
+    results['antagonists'] = ant_gold
+    results['antagonists_predicted'] = predicted_ant
+
+    return results
+
 def evaluate_corpus(books):
     results = {'relationships': {}, 'prot/ant': {}}
 
@@ -569,10 +628,10 @@ def evaluate_corpus(books):
 
 if __name__ == '__main__':
     FULL = True
-    path = 'pickles/svo_'
+    path = 'pickles/svo_v1_'
 
     svo = True
-    verb = True  # sent only, True sentiment on verb only, False sentiment on whole sentence
+    verb = False  # sent only, True sentiment on verb only, False sentiment on whole sentence
 
     MAKE_DATASET = False
     MAKE_BOOKS = True
