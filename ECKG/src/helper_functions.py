@@ -143,7 +143,6 @@ class SloveneCorefPipeline:
                         "score": mention_score
                     })
 
-
         mentions = []
         for mention in coref_input.mentions.values():
             [sentence_id, token_id] = [int(idx) for idx in mention.tokens[0].token_id.split("-")]
@@ -353,6 +352,7 @@ def get_relations_from_sentences(data: Document, ner_mapper: dict, coref_pipelin
 
     return pairs
 
+
 def get_relations_from_sentences_coref_sentence_sent(data: Document, ner_mapper: dict, sa: SentimentAnalysis,
                                                      coref_pipeline=None):
     """
@@ -417,7 +417,7 @@ def get_relations_from_sentences_coref_sentence_sent(data: Document, ner_mapper:
                     pass
                     # print("WARNING")
         del curr_entities[-appended_words:]
-    #print(pairs)
+    # print(pairs)
     return pairs
 
     pairs = []
@@ -595,7 +595,6 @@ def entity_text_string(a):
     if isinstance(a, spacy.tokens.token.Token):
         return a.text
     return " ".join(x.text for x in a.words)
-
 
 
 def get_relations_from_sentences_sentiment(data: Document, ner_mapper: dict, sa: SentimentAnalysis):
@@ -975,9 +974,12 @@ def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper, doc=
     for s, v, o in events:
         if isinstance(s, tuple) or isinstance(o, tuple) or s == '<|EMPTY|>' or o == '<|EMPTY|>':
             continue
-
+        if list_to_string([x.text for x in s]) == "Biló" or list_to_string([x.text for x in s]) == "Biló":
+            print("hello")
         s_sim = find_similar(list_to_string([x.text for x in s]), dedup_keys)
         o_sim = find_similar(list_to_string([x.text for x in o]), dedup_keys)
+        s_sim = deduplication_mapper(s_sim)
+        o_sim = deduplication_mapper(o_sim)
         if s_sim is not None and o_sim is not None:
             # s.text = deduplication_mapper[s_sim]
             # o.text = deduplication_mapper[o_sim]
@@ -1009,10 +1011,9 @@ def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper, doc=
             if o_ok and s_ok and o_ok != s_ok:
                 event_entities.append(o_ok)
                 event_entities.append(s_ok)
-                if s_ok == "cap" or o_ok == "cap":
-                    print("hello")
                 event_tmp.append((s_ok, [x.text for x in v], o_ok))
 
+    print("hello")
     # print(NER_containing_events)
     deduplication_mapper, count = deduplicate_named_entities(event_entities, count_entities=True)
     for s, v, o in event_tmp:
