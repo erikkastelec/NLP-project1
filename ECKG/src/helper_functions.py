@@ -397,7 +397,7 @@ def entity_text_string(a):
     return " ".join(x.text for x in a.words)
 
 
-def get_relations_from_sentences(data: Document, ner_mapper: dict):
+def get_relations_from_sentences(data: Document, ner_mapper: dict, coref_pipeline=None):
     """
     Find pairs of entities, which co-occur in the same sentence.
     Returns:
@@ -405,7 +405,11 @@ def get_relations_from_sentences(data: Document, ner_mapper: dict):
     """
     pairs = []
     for i, sentence in enumerate(data.sentences):
+        if coref_pipeline:
 
+            curr_entities = sentence.entities
+            for word in sentence.words:
+                print("hello")
         if len(sentence.entities) > 1:
             curr_words = []
             verbs = []
@@ -759,7 +763,7 @@ def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper, doc=
             # o.text = deduplication_mapper[o_sim]
             NER_containing_events.append((s_sim, list_to_string([x.text for x in v]), o_sim))
 
-        elif len(s) < 3 and len(o) < 3:
+        elif len(s) < 3 and len(o) < 3 and coref_pipeline:
             s_ok = None
             o_ok = None
             if not s_sim:
