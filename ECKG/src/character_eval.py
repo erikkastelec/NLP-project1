@@ -225,7 +225,7 @@ def make_dataset(corpus, path, svo, verb, true_chars):
     n_mapper = []
 
     #forbidden = ['The Lord Of The Rings: The Fellowship of the Ring', 'The Great Gatsby', 'Anna Karenina']
-    forbidden = ['Harry Potter 1', 'The Lord Of The Rings: The Fellowship of the Ring', 'The Great Gatsby']
+    forbidden = ['The Lord Of The Rings: The Fellowship of the Ring', 'The Great Gatsby', 'Harry Potter 1']
     for book in tqdm(corpus, total=len(corpus), file=sys.stdout):
         print(book.title)
         if book.title in forbidden:
@@ -717,28 +717,18 @@ def evaluate_corpus(books, res_pa):
 
     return results
 
-
-if __name__ == '__main__':
-    FULL = True
-    TRUE_CHARS = False
-    path = 'pickles/sent_v2_'
-
-    svo = False
-    verb = False  # sent only, True sentiment on verb only, False sentiment on whole sentence
-
+def run_all(FULL, TRUE_CHARS, path, svo, verb, x=False):
     MAKE_DATASET = False
     MAKE_BOOKS = True
-    SHOW_PLOTS = False
+    SHOW_PLOTS = True
     SAVE_PLOTS = False
     SAVE_CORPUS_EVAL = True
 
     if FULL:
         MAKE_DATASET = True
         MAKE_BOOKS = True
-        SHOW_PLOTS = True
         SAVE_PLOTS = True
         SAVE_CORPUS_EVAL = True
-
 
     corpus_full = get_data("../../books/corpus.tsv", get_text=True)
     corpus_slo = [book for book in corpus_full if book.language == "slovenian"]
@@ -766,7 +756,9 @@ if __name__ == '__main__':
     if MAKE_BOOKS:
         mapped_rels = []
         for book in corpus:
-            relationships_mapped = [(find_char_by_id(book, relation[0]), find_char_by_id(book, relation[1]), relation[2]) for relation in book.relations]
+            relationships_mapped = [
+                (find_char_by_id(book, relation[0]), find_char_by_id(book, relation[1]), relation[2]) for relation in
+                book.relations]
             mapped_rels.append(relationships_mapped)
 
         cc = [[x.name for x in c] for c in characters]
@@ -780,14 +772,15 @@ if __name__ == '__main__':
             x['antagonists'] = book.antagonists_names
             x['language'] = book.language
             temp_char = map_ner([c.name for c in book.characters], ner)
-            x['relation_eval'] = evaluate_relationships(map_ner(mr, ner), map_ner(get_edgelist(nx.Graph(graph)), ner), temp_char)
+            x['relation_eval'] = evaluate_relationships(map_ner(mr, ner), map_ner(get_edgelist(nx.Graph(graph)), ner),
+                                                        temp_char)
             x['gold_relations'] = mr
             x['graph'] = get_edgelist(nx.Graph(graph))
             x['features'] = ff
-            x['true_labels'] = labels[count:count+len(ff)]
+            x['true_labels'] = labels[count:count + len(ff)]
             t = []
             for j, f in enumerate(ff):
-                t.append(list(f)+list(labels[count+j]))
+                t.append(list(f) + list(labels[count + j]))
             x['both'] = t
             x['ner_mapper'] = ner
 
@@ -801,28 +794,31 @@ if __name__ == '__main__':
         with open(path + 'books.pickle', 'rb') as f:
             books = pickle.load(f)
 
-    #X_train, X_test, Y_train, Y_test = train_test_split(features_flat, labels, test_size=0.5, random_state=42) # split among all chars
 
     ffs = [book['features'] for book in books]
     lbs = [book['true_labels'] for book in books]
 
-    X_train, X_test, Y_train, Y_test = train_test_split(ffs, lbs, test_size=0.5, random_state=42) # split by books
+    if x:
+        X_train, X_test, Y_train, Y_test = train_test_split(features_flat, labels, test_size=0.5,
+                                                            random_state=42)  # split among all chars
+    else:
+        X_train, X_test, Y_train, Y_test = train_test_split(ffs, lbs, test_size=0.5)  # split by books
+        X_train = np.array(flatten(X_train))
+        X_test = np.array(flatten(X_test))
+        Y_train = np.array(flatten(Y_train))
+        Y_test = np.array(flatten(Y_test))
 
-    books_test = [y[0][-1]for y in Y_test]
+    books_test = [y[0][-1] for y in Y_test]
     books_train = [y[0][-1] for y in Y_train]
 
-    X_train = np.array(flatten(X_train))
-    X_test = np.array(flatten(X_test))
-    Y_train = np.array(flatten(Y_train))
-    Y_test = np.array(flatten(Y_test))
 
     cf_a_dt, cf_a_rf, cf_a_knn, cf_a_svc = train_classifiers(X_train, X_test, Y_train[:, 0], Y_test[:, 0])
     cf_p_dt, cf_p_rf, cf_p_knn, cf_p_svc = train_classifiers(X_train, X_test, Y_train[:, 1], Y_test[:, 1])
     cf_dt, cf_rf, cf_knn, cf_svc = train_classifiers(X_train, X_test, Y_train[:, 2], Y_test[:, 2])
 
-    #p_a, pp_a = get_predictions_prob(cf_a_svc, X_test)
-    #p_p, pp_p = get_predictions_prob(cf_p_svc, X_test)
-    #p, pp = get_predictions_prob(cf_svc, X_test)
+    # p_a, pp_a = get_predictions_prob(cf_a_svc, X_test)
+    # p_p, pp_p = get_predictions_prob(cf_p_svc, X_test)
+    # p, pp = get_predictions_prob(cf_svc, X_test)
 
     p_a = get_predictions(cf_a_svc, X_test)
     p_p = get_predictions(cf_p_svc, X_test)
@@ -832,14 +828,14 @@ if __name__ == '__main__':
     pp_p = np.zeros(len(p_p))
     pp = np.zeros(len(p))
 
-    evals_test = eval_all_books(corpus_slo, Y_test[:, 3], p_p, pp_p, p_a, pp_a)
+    evals_test = eval_all_books(corpus, Y_test[:, 3], p_p, pp_p, p_a, pp_a)
 
     print('TEST:')
     print(evals_test)
 
-    #p_a, pp_a = get_predictions_prob(cf_a_svc, features_flat)
-    #p_p, pp_p = get_predictions(cf_p_svc, features_flat)
-    #p, pp = get_predictions(cf_svc, features_flat)
+    # p_a, pp_a = get_predictions_prob(cf_a_svc, features_flat)
+    # p_p, pp_p = get_predictions(cf_p_svc, features_flat)
+    # p, pp = get_predictions(cf_svc, features_flat)
 
     p_a = get_predictions(cf_a_svc, features_flat)
     p_p = get_predictions(cf_p_svc, features_flat)
@@ -849,11 +845,10 @@ if __name__ == '__main__':
     pp_p = np.zeros(len(p_p))
     pp = np.zeros(len(p))
 
-    evals_all = eval_all_books(corpus_slo, labels[:, 3], p_p, pp_p, p_a, pp_a)
+    evals_all = eval_all_books(corpus, labels[:, 3], p_p, pp_p, p_a, pp_a)
 
     print('ALL:')
     print(evals_all)
-
 
     if SHOW_PLOTS:
         gs = []
@@ -861,17 +856,18 @@ if __name__ == '__main__':
             gs.append((book['graph'], book['gold_relations'], book['title']))
         draw_network_comparison_all(gs, path.split('/')[1], save=SAVE_PLOTS)
 
-
     cf_a = cf_a_rf
     cf_p = cf_p_rf
 
     res_pred = []
     for book in books:
-        x = eval_book_prediction(book, cf_a, cf_p)
-        if book['title'] in books_train:
-            res_pred.append((x, book['title'], 'train'))
+        z = eval_book_prediction(book, cf_a, cf_p)
+        if x:
+            res_pred.append((z, book['title'], 'test'))
+        elif book['title'] in books_train:
+            res_pred.append((z, book['title'], 'train'))
         else:
-            res_pred.append((x, book['title'], 'test'))
+            res_pred.append((z, book['title'], 'test'))
 
     eval_corpus = evaluate_corpus(books, res_pred)
 
@@ -879,4 +875,14 @@ if __name__ == '__main__':
         with open(path + 'corpus_eval.pickle', 'wb') as f:
             pickle.dump(eval_corpus, f)
 
-    pass
+
+if __name__ == '__main__':
+    FULL = True
+    TRUE_CHARS = False
+    path = 'pickles/sent_verb_gold_v3_'
+
+    svo = False # True use method 3: ECSVO, False use method 2: ECS
+    verb = True  # ECS only, True sentiment on verb only, False sentiment on whole sentence
+
+
+    run_all(FULL, False, path, svo, verb,)
