@@ -21,7 +21,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------
-This code was derived from a SeqNet repository located at
+This code was derived from a SloCOREF repository located at
+https://github.com/RSDO-DS3/SloCOREF and
 https://github.com/matejklemen/slovene-coreference-resolution and distributed under the
 following license, located in `LICENSE`:
 

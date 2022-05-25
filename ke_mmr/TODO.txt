@@ -1,9 +1,0 @@
-PREPARE LITBANK
- - divide by sentences
- - find events in senntences
- - prepare data = [[[document_name, [emb_sen1], [emb_sen2], [event1_index], [event2_index], label]], ...]
-
-FIX knowledge_graph
-
-FIX masking
-    - need to be equal length
