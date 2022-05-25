@@ -27,10 +27,5 @@ python ./ECKG/src/character_eval.py
 #### Corpus
 
 [Corpus.tsv](./books/corpus.tsv)
-[Books](./books/) <br>
 
-#### Entity co-occurrence graph (ECG)
-
-[Helper functions (deduplication, graph building, entity importanc evaluation](./ECKG/src/helper_functions.py) <br>
-[SVO triplet extraction](./ECKS/src/eventify.py)
 
