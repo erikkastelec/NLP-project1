@@ -24,6 +24,12 @@ To run relation detection and protagonist/antagonist prediction run:
 python ./ECKG/src/character_eval.py
 ```
 
+For comparison of different relation detection and protagonist/antagonist prediction run:
+```
+python ./ECKG/src/eval_corpus.py
+```
+
+
 #### Corpus
 
 [Corpus.tsv](./books/corpus.tsv)
