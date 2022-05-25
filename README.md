@@ -1,23 +1,36 @@
 # NLP-project1 (fk58d7avc9)
 
-### Corpus
+## Evaluation
+
+For access to the books please contact me at: [Erik Kastelec](mailto:erikkastelec@gmail.com)
+
+* put txt files for corpus books into books directory
+* install requirements
+
+```
+pip install -r ./ECKG/src/requirements.txt
+python -m spacy download en_core_web_trf
+```
+
+To run literary character recognition and ranking run:
+
+```
+python ./ECKG/src/evaluation.py
+```
+
+To run relation detection and protagonist/antagonist prediction run:
+
+```
+python ./ECKG/src/character_eval.py
+```
+
+#### Corpus
+
 [Corpus.tsv](./books/corpus.tsv)
 [Books](./books/) <br>
 
-### Entity co-occurrence knowledge graph (ECKG)
+#### Entity co-occurrence graph (ECG)
 
-[Python notebook](./ECKG/src/ECKG.ipynb) <br>
-[README](./ECKG/README.md) <br>
 [Helper functions (deduplication, graph building, entity importanc evaluation](./ECKG/src/helper_functions.py) <br>
 [SVO triplet extraction](./ECKS/src/eventify.py)
-### Evaluation
 
-[evaluation.py](./ECKG/src/evaluation.py)
-
-### Relationship extraction
-
-[Python notebook](./Relation_extracting/notebook.ipynb)
-
-### Event causality identification
-
-[Python notebook](./ke_mmr/event_causality_identification.ipynb)

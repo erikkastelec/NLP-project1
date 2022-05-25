@@ -25,7 +25,7 @@ def ranking_metric(book: Book, predictions):
         predicted = False
         for sinonim in character.sinonims:
             og_sinonim = sinonim
-            sinonim = find_similar(sinonim, predictions, similarity=80)
+            sinonim = find_similar(sinonim, predictions, similarity=90)
             if sinonim is not None:
                 predicted = True
                 actual.append(sinonim)
@@ -102,7 +102,7 @@ def evaluate_book(book: Book, pipeline, coref_pipeline, svo_extractor, cutoff=0.
     # print(x)
     # exit()
     # Run named entity deduplication/resolution
-    deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True, add_missed=True, book=book)
+    deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True, add_missed=False, book=book)
     # data = add_missed(book, data, deduplication_mapper)
     # deduplication_mapper, count = deduplicate_named_entities(data, count_entities=True)
     if coref_pipeline:
@@ -113,7 +113,7 @@ def evaluate_book(book: Book, pipeline, coref_pipeline, svo_extractor, cutoff=0.
         # Set count of named entities to number of coreference mentions
         for key, value in coref_chains.items():
             count[key] = len(value)
-        # Add entities from new_chains to named entity count dict
+        # Add entities from new_chains to named ent1ity count dict
         for key, value in new_chains.items():
             count[value[0].text] = len(value[1])
 
@@ -130,7 +130,7 @@ def evaluate_book(book: Book, pipeline, coref_pipeline, svo_extractor, cutoff=0.
     cutoff_names = names
     cutoff_values = values
     cutoff_names, cutoff_values = keep_top(names, values, cutoff=cutoff)
-    print(cutoff_names)
+    # print(cutoff_names)
     # for i in range(len(cutoff)):
     #     print(names[i] + ": " + str(cutoff[i]))
     metrics11 = calculate_metrics(book, cutoff_names)
@@ -151,16 +151,13 @@ def evaluate_book(book: Book, pipeline, coref_pipeline, svo_extractor, cutoff=0.
     # plt.savefig("plot.png")
     # 2. IMPORTANCE BASED ON GRAPH CENTRALITIES, WHERE GRAPH IS CONSTRUCTED FROM ENTITY CO-OCCURRENCES IN THE SAME SENTENCE
     try:
-        sentiwordnet_en = read_lexicon_sentiwordnet("../../sentiment/lexicons/SentiWordNet.txt")
-        sa_swn = SentimentAnalysis(sentiwordnet_en)
-        sentence_relations = get_relations_from_sentences_coref_sentence_sent(data, deduplication_mapper, sa_swn,
-                                                                              coref_pipeline=coref_pipeline)
+        sentence_relations = get_relations_from_sentences(data, deduplication_mapper, coref_pipeline=coref_pipeline)
         graph = create_graph_from_pairs(sentence_relations)
         names, values = graph_entity_importance_evaluation(graph)
         cutoff_names = names
         cutoff_values = values
         cutoff_names, cutoff_values = keep_top(names, values, cutoff=cutoff)
-        print(cutoff_names)
+        # print(cutoff_names)
         # values = np.array(v2, dtype=np.float32)
         # values = values[values > 0]
         # names = n2[0:len(values)]
@@ -193,12 +190,12 @@ def evaluate_book(book: Book, pipeline, coref_pipeline, svo_extractor, cutoff=0.
         cutoff_names = names
         cutoff_values = values
         cutoff_names, cutoff_values = keep_top(names, values, cutoff=cutoff)
-        print(cutoff_names)
+        # print(cutoff_names)
         # values = np.array(v3, dtype=np.float32)
         # values = values[values > 0]
         # names = n3[0:len(values)]
         # print(names)
-        print([[character.sinonims for character in book.characters]])
+        # print([[character.sinonims for character in book.characters]])
         metrics31 = calculate_metrics(book, cutoff_names)
         metrics32 = calculate_metrics(book, names[0:len(book.characters)])
         metrics3 = (
@@ -214,70 +211,151 @@ def evaluate_book(book: Book, pipeline, coref_pipeline, svo_extractor, cutoff=0.
     return metrics1, metrics2, metrics3
 
 
+def print_metric_final(m1, m2, m3, titles):
+    method_titles = ["EOIS", "ECS", "ECSVO"]
+    for i in range(0, len(titles)):
+        print("Title: ", titles[i])
+        for j, x in enumerate([m1, m2, m3]):
+            precision = x[3][i]
+            recall = x[4][i]
+            f_score = x[5][i]
+            mAP = x[6][i]
+            print("Method: ", method_titles[j])
+            print("Precision: ", str(precision))
+            print("Recall: ", str(recall))
+            print("F1 score: ", str(f_score))
+            print("Mean average precision: ", str(mAP))
+            print("*************************")
+    print("AVERAGE")
+    for i, x in enumerate([m1, m2, m3]):
+        print("Method ", str(i))
+        print("Precision: ", str(sum(x[3]) / len(x[3])))
+        print("Recall: ", str(sum(x[4]) / len(x[4])))
+        print("F1 score: ", str(sum(x[5]) / len(x[5])))
+        print("Mean average precision: ", str(sum(x[6]) / len(x[6])))
+
+
 def evaluate_all(corpus_path="../../books/corpus.tsv"):
     corpus = get_data(corpus_path, get_text=True)
     # Initialize Slovene classla pipeline
+
+    m1_slo = [[] for _ in range(7)]
+    m2_slo = [[] for _ in range(7)]
+    m3_slo = [[] for _ in range(7)]
+    title_slo = []
+    m1_en = [[] for _ in range(7)]
+    m2_en = [[] for _ in range(7)]
+    m3_en = [[] for _ in range(7)]
+    title_en = []
+    m1_comb = [[] for _ in range(7)]
+    m2_comb = [[] for _ in range(7)]
+    m3_comb = [[] for _ in range(7)]
+    title_comb = []
     classla.download('sl')
     sl_pipeline = classla.Pipeline("sl", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
     sl_e = Eventify(language="sl")
-
     # Initialize English stanza pipeline
     stanza.download("en")
     en_pipeline = stanza.Pipeline("en", processors='tokenize,ner, lemma, pos, mwt, depparse', use_gpu=True)
     en_e = Eventify(language="en")
+    en_coref_pipeline = EnglishCorefPipeline()
+    count = 0
+    disregard_list = ['The Lord Of The Rings: The Fellowship of the Ring', 'The Great Gatsby',]
     for book in corpus:
+        # if count == 3:
+        #     continue
+        count += 1
+        if book.title in disregard_list:
+            continue
         if book.language == "slovenian":
-            evaluate_book(book, sl_pipeline, sl_e, cutoff=0.9)
+            try:
+                res = evaluate_book(book, sl_pipeline, None, sl_e, cutoff=0.8)
+                for (x, y) in zip(res, [m1_slo, m2_slo, m3_slo]):
+                    for i, z in enumerate(x):
+                        y[i].append(z)
+                for (x, y) in zip(res, [m1_comb, m2_comb, m3_comb]):
+                    for i, z in enumerate(x):
+                        y[i].append(z)
+                title_slo.append(book.title)
+                title_comb.append(book.title)
+                print("Analized book: ", str(count), " with title: ", book.title)
+            except Exception:
+                print("Failed to analyze: ", book.title)
         else:
-            evaluate_book(book, en_pipeline, en_e, cutoff=0.9)
+            try:
+                res = evaluate_book(book, en_pipeline, en_coref_pipeline, en_e, cutoff=0.8)
+                for (x, y) in zip(res, [m1_en, m2_en, m3_en]):
+                    for i, z in enumerate(x):
+                        y[i].append(z)
+                for (x, y) in zip(res, [m1_comb, m2_comb, m3_comb]):
+                    for i, z in enumerate(x):
+                        y[i].append(z)
+                title_en.append(book.title)
+                title_comb.append(book.title)
+                print("Analized book: ", str(count), " with title: ", book.title)
+            except Exception:
+                print("Failed to analyze: ", book.title)
+
+    if len(m1_slo[0]) > 0:
+        print("SLO books statistics: ")
+        print_metric_final(m1_slo, m2_slo, m3_slo, title_slo)
+
+    if len(m1_en[0]) > 0:
+        print("ENG books statistics: ")
+        print_metric_final(m1_en, m2_en, m3_en, title_en)
+    print("COMBINED statistics: ")
+
+    print_metric_final(m1_comb, m2_comb, m3_comb, title_comb)
 
 
 if __name__ == "__main__":
-    corpus = get_data("../../books/corpus.tsv", get_text=True)
+    evaluate_all()
+    # corpus = get_data("../../books/corpus.tsv", get_text=True)
     # sl_pipeline = classla.Pipeline("sl", processors='tokenize,ner, lemma, pos, depparse', use_gpu=True)
     # sl_e = Eventify(language="sl")
-    en_pipeline = stanza.Pipeline("en", processors='tokenize,ner, lemma, pos,mwt,  depparse', use_gpu=True)
-    en_coref_pipeline = EnglishCorefPipeline()
-    en_e = Eventify(language="en")
-    slo_books = []
-
-    m1 = [[] for _ in range(7)]
-    m2 = [[] for _ in range(7)]
-    m3 = [[] for _ in range(7)]
-    count = 0
-    for book in corpus:
-        if count == 5:
-            break
-        if book.language == "slovenian":
-            continue
-            # try:
-
-            res = evaluate_book(book, sl_pipeline, None, sl_e, cutoff=0.8, verbose=False)
-            for (x, y) in zip(res, [m1, m2, m3]):
-                for i, z in enumerate(x):
-                    y[i].append(z)
-
-            count += 1
-            # except Exception as e:
-            #     print(e)
-        elif book.language == "english":
-            # continue
-            # try:
-            if book.title == "Little Red Cap":
-                res = evaluate_book(book, en_pipeline, en_coref_pipeline, en_e, cutoff=0.8, verbose=False)
-                for (x, y) in zip(res, [m1, m2, m3]):
-                    for i, z in enumerate(x):
-                        y[i].append(z)
-                count += 1
-            # except Exception as e:
-            #     print(e)
-
-    for i, x in enumerate([m1, m2, m3]):
-        print("Method ", str(i))
-        print("Precision 1: ", str(sum(x[0]) / len(x[0])))
-        print("Recall 1: ", str(sum(x[1]) / len(x[1])))
-        print("F1 score 1: ", str(sum(x[2]) / len(x[2])))
-        print("Precision 2: ", str(sum(x[3]) / len(x[3])))
-        print("Recall 2: ", str(sum(x[4]) / len(x[4])))
-        print("F1 score 2: ", str(sum(x[5]) / len(x[5])))
-        print("Mean average precision: ", str(sum(x[6]) / len(x[6])))
+    # # en_pipeline = stanza.Pipeline("en", processors='tokenize,ner, lemma, pos,mwt,  depparse', use_gpu=True)
+    # # en_coref_pipeline = EnglishCorefPipeline()
+    # # en_e = Eventify(language="en")
+    # slo_books = []
+    #
+    # m1 = [[] for _ in range(7)]
+    # m2 = [[] for _ in range(7)]
+    # m3 = [[] for _ in range(7)]
+    # count = 0
+    # for book in corpus:
+    #     if count == 5:
+    #         break
+    #     if book.language == "slovenian":
+    #         # continue
+    #         # try:
+    #         if book.title != "Deseti brat":
+    #             continue
+    #         res = evaluate_book(book, sl_pipeline, None, sl_e, cutoff=0.8, verbose=False)
+    #         for (x, y) in zip(res, [m1, m2, m3]):
+    #             for i, z in enumerate(x):
+    #                 y[i].append(z)
+    #
+    #         count += 1
+    #         # except Exception as e:
+    #         #     print(e)
+    #     elif book.language == "english":
+    #         continue
+    #         # try:
+    #         if book.title == "Little Red Cap":
+    #             res = evaluate_book(book, en_pipeline, en_coref_pipeline, en_e, cutoff=0.8, verbose=False)
+    #             for (x, y) in zip(res, [m1, m2, m3]):
+    #                 for i, z in enumerate(x):
+    #                     y[i].append(z)
+    #             count += 1
+    #         # except Exception as e:
+    #         #     print(e)
+    #
+    # for i, x in enumerate([m1, m2, m3]):
+    #     print("Method ", str(i))
+    #     print("Precision 1: ", str(sum(x[0]) / len(x[0])))
+    #     print("Recall 1: ", str(sum(x[1]) / len(x[1])))
+    #     print("F1 score 1: ", str(sum(x[2]) / len(x[2])))
+    #     print("Precision 2: ", str(sum(x[3]) / len(x[3])))
+    #     print("Recall 2: ", str(sum(x[4]) / len(x[4])))
+    #     print("F1 score 2: ", str(sum(x[5]) / len(x[5])))
+    #     print("Mean average precision: ", str(sum(x[6]) / len(x[6])))

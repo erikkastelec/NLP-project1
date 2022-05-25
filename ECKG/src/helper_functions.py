@@ -42,13 +42,99 @@ def list_to_string(l):
         try:
             s += " " + l[x]
         except TypeError:
-            print("hello")
+            pass
     return s
 
 
-"""
-Coreference pipeline class. Modified from: https://github.com/RSDO-DS3/SloCOREF
-"""
+class EnglishCorefPipeline:
+    def __init__(self):
+        "python -m spacy download en_core_web_trf "
+        nlp = spacy.load("en_core_web_trf")
+        nlp.add_pipe('coreferee')
+        self.pipeline = nlp
+        self.rules_analyzer = nlp.get_pipe('coreferee').annotator.rules_analyzer
+        self.doc = None
+        self.coref_chains = None
+        self.mapping_dict = None
+        self.new_entity_names = None
+
+    def process_text(self, text):
+        self.doc = self.pipeline(text)
+
+    def resolve_coref(self, id):
+        # t = find_similar(self.doc[id].text, self.new_entity_names)
+        # if t:
+        #     print(t)
+        #     print(self.doc[id].text)
+        # if not t:
+        if id:
+            try:
+                t = self.mapping_dict[id]
+            except KeyError:
+                t = None
+            return t
+        else:
+            return None
+        # return self.coref_chains.resolve(self.doc[id])
+
+    def get_proper_coref_name(self, id):
+        return self.rules_analyzer.get_propn_subtree(self.doc[id])
+
+    def unify_naming_coreferee(self, deduplication_mapper):
+        if not self.doc:
+            raise Exception("No text has been processed. (call process_text(text))")
+        dedup_keys = deduplication_mapper.keys()
+        disregard_list = ["man", "woman", "name"]
+        chains = self.doc._.coref_chains
+        self.coref_chains = chains
+        named_entity_chains = {}
+        new_chains = {}
+        # (spacy word, count)
+        new_chains_words = {}
+
+        for chain in chains:
+            if len(chain.mentions[chain.most_specific_mention_index]) == 1:
+                word = self.doc[chain.mentions[chain.most_specific_mention_index].root_index]
+                name = list_to_string([x.text for x in self.rules_analyzer.get_propn_subtree(word)])
+                if isinstance(name, str) and name == "":
+                    name = list_to_string(
+                        [self.doc[x].text for x in chain.mentions[chain.most_specific_mention_index].token_indexes])
+
+                similar = find_similar(name, dedup_keys, similarity=80)
+                if similar:
+                    try:
+                        named_entity_chains[similar] = named_entity_chains[similar] + flatten_list(chain.mentions)
+                    except KeyError:
+                        named_entity_chains[similar] = flatten_list(chain.mentions)
+                else:
+
+                    if word.tag_ == "NN" and word.text not in disregard_list:
+                        try:
+                            new_chains_words[name] = (new_chains_words[name][0], new_chains_words[name][1] + 1)
+                            new_chains[name] = new_chains[name] + flatten_list(chain.mentions)
+                        except KeyError:
+                            new_chains_words[name] = (word, 1)
+                            new_chains[name] = flatten_list(chain.mentions)
+
+        # sort dict
+        new_chains_words = dict(sorted(new_chains_words.items(), key=lambda x: -x[1][1]))
+        # Keep only top 10% new ones
+
+        new_chains_words = keep_top_dict(new_chains_words)
+        mapping_dict = {}
+
+        for key, value in new_chains_words.items():
+            new_chains_words[key] = (value[0], new_chains[key])
+            for x in new_chains[key]:
+                mapping_dict[x] = key
+        self.new_entity_names = new_chains_words.keys()
+        for key, value in named_entity_chains.items():
+            for x in value:
+                mapping_dict[x] = key
+            deduplication_mapper[key] = key
+        self.mapping_dict = mapping_dict
+
+        return named_entity_chains, new_chains_words
 
 
 class SloveneCorefPipeline:
@@ -172,99 +258,6 @@ class SloveneCorefPipeline:
             "mentions": mentions,
             "coreferences": sorted(coreferences, key=lambda x: x["id1"])
         }
-
-
-class EnglishCorefPipeline:
-    def __init__(self):
-        "python -m spacy download en_core_web_trf "
-        nlp = spacy.load("en_core_web_trf")
-        nlp.add_pipe('coreferee')
-        self.pipeline = nlp
-        self.rules_analyzer = nlp.get_pipe('coreferee').annotator.rules_analyzer
-        self.doc = None
-        self.coref_chains = None
-        self.mapping_dict = None
-        self.new_entity_names = None
-
-    def process_text(self, text):
-        self.doc = self.pipeline(text)
-
-    def resolve_coref(self, id):
-        # t = find_similar(self.doc[id].text, self.new_entity_names)
-        # if t:
-        #     print(t)
-        #     print(self.doc[id].text)
-        # if not t:
-        if id:
-            try:
-                t = self.mapping_dict[id]
-            except KeyError:
-                t = None
-            return t
-        else:
-            return None
-        # return self.coref_chains.resolve(self.doc[id])
-
-    def get_proper_coref_name(self, id):
-        return self.rules_analyzer.get_propn_subtree(self.doc[id])
-
-    def unify_naming_coreferee(self, deduplication_mapper):
-        if not self.doc:
-            raise Exception("No text has been processed. (call process_text(text))")
-        dedup_keys = deduplication_mapper.keys()
-        disregard_list = ["man", "woman", "name"]
-        chains = self.doc._.coref_chains
-        self.coref_chains = chains
-        named_entity_chains = {}
-        new_chains = {}
-        # (spacy word, count)
-        new_chains_words = {}
-
-        for chain in chains:
-            if len(chain.mentions[chain.most_specific_mention_index]) == 1:
-                word = self.doc[chain.mentions[chain.most_specific_mention_index].root_index]
-                name = list_to_string([x.text for x in self.rules_analyzer.get_propn_subtree(word)])
-                if isinstance(name, str) and name == "":
-                    name = list_to_string(
-                        [self.doc[x].text for x in chain.mentions[chain.most_specific_mention_index].token_indexes])
-
-                similar = find_similar(name, dedup_keys, similarity=80)
-                if name == "cap":
-                    print("hello")
-                if similar:
-                    try:
-                        named_entity_chains[similar] = named_entity_chains[similar] + flatten_list(chain.mentions)
-                    except KeyError:
-                        named_entity_chains[similar] = flatten_list(chain.mentions)
-                else:
-
-                    if word.tag_ == "NN" and word.text not in disregard_list:
-                        try:
-                            new_chains_words[name] = (new_chains_words[name][0], new_chains_words[name][1] + 1)
-                            new_chains[name] = new_chains[name] + flatten_list(chain.mentions)
-                        except KeyError:
-                            new_chains_words[name] = (word, 1)
-                            new_chains[name] = flatten_list(chain.mentions)
-
-        # sort dict
-        new_chains_words = dict(sorted(new_chains_words.items(), key=lambda x: -x[1][1]))
-        # Keep only top 10% new ones
-
-        new_chains_words = keep_top_dict(new_chains_words)
-        mapping_dict = {}
-
-        for key, value in new_chains_words.items():
-            new_chains_words[key] = (value[0], new_chains[key])
-            for x in new_chains[key]:
-                mapping_dict[x] = key
-        self.new_entity_names = new_chains_words.keys()
-        for key, value in named_entity_chains.items():
-            for x in value:
-                mapping_dict[x] = key
-            deduplication_mapper[key] = key
-        self.mapping_dict = mapping_dict
-
-        return named_entity_chains, new_chains_words
 
 
 def get_relations_from_sentences(data: Document, ner_mapper: dict, coref_pipeline=None):
@@ -974,8 +967,7 @@ def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper, doc=
     for s, v, o in events:
         if isinstance(s, tuple) or isinstance(o, tuple) or s == '<|EMPTY|>' or o == '<|EMPTY|>':
             continue
-        if list_to_string([x.text for x in s]) == "Biló" or list_to_string([x.text for x in s]) == "Biló":
-            print("hello")
+
         s_sim = find_similar(list_to_string([x.text for x in s]), dedup_keys)
         o_sim = find_similar(list_to_string([x.text for x in o]), dedup_keys)
         if s_sim is not None and o_sim is not None:
@@ -1015,7 +1007,6 @@ def get_entities_from_svo_triplets(book, e: Eventify, deduplication_mapper, doc=
                 event_entities.append(s_ok)
                 event_tmp.append((s_ok, [x.text for x in v], o_ok))
 
-    print("hello")
     # print(NER_containing_events)
     deduplication_mapper, count = deduplicate_named_entities(event_entities, count_entities=True)
     for s, v, o in event_tmp:
