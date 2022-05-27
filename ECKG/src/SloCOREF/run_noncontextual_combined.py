@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from sklearn.model_selection import KFold
 
-from ECKG.src.SloCOREF.data import read_corpus
+from data import read_corpus
 from noncontextual_model import NoncontextualController, parser
 from utils import fixed_split, extract_vocab, split_into_sets, KFoldStateCache
 
