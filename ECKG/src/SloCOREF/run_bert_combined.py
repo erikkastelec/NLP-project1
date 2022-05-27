@@ -8,7 +8,7 @@ from contextual_model_bert import ContextualControllerBERT, parser
 from utils import fixed_split, KFoldStateCache, split_into_sets
 import numpy as np
 
-from ECKG.src.SloCOREF.data import read_corpus
+from data import read_corpus
 
 DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 parser.add_argument("--source_dataset", type=str, default="senticoref")
