@@ -17,7 +17,7 @@ from sklearn.model_selection import KFold
 from common import ControllerBase, NeuralCoreferencePairScorer
 from utils import split_into_sets, fixed_split, KFoldStateCache
 
-from ECKG.src.SloCOREF.data import read_corpus, Document
+from data import read_corpus, Document
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--model_name", type=str, default=None)
