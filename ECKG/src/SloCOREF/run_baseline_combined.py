@@ -2,7 +2,7 @@ import torch
 from sklearn.model_selection import KFold
 
 from baseline import BaselineController, MentionPairFeatures, parser
-from ECKG.src.SloCOREF.data import read_corpus
+from data import read_corpus
 from utils import fixed_split, KFoldStateCache, split_into_sets
 import logging
 import numpy as np
