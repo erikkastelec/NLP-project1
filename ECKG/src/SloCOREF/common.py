@@ -4,12 +4,12 @@ import time
 
 from tqdm import tqdm
 
-import ECKG.src.SloCOREF.metrics
+import metrics
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ECKG.src.SloCOREF.utils import get_clusters
-from ECKG.src.SloCOREF.visualization import build_and_display
+from utils import get_clusters
+from visualization import build_and_display
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
