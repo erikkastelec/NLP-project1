@@ -2,8 +2,8 @@ import classla
 import numpy as np
 import stanza
 
-from ECKG.src.eventify import Eventify
-from ECKG.src.helper_functions import fix_ner, deduplicate_named_entities, get_relations_from_sentences, \
+from eventify import Eventify
+from helper_functions import fix_ner, deduplicate_named_entities, get_relations_from_sentences, \
     create_graph_from_pairs, graph_entity_importance_evaluation, get_entities_from_svo_triplets, find_similar, \
     EnglishCorefPipeline, get_relations_from_sentences_coref_sentence_sent, SloveneCorefPipeline
 from books.get_data import get_data, Book

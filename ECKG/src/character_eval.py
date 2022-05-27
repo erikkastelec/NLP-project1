@@ -6,15 +6,15 @@ import os
 from tqdm import tqdm
 import sys
 
-from ECKG.src.eventify import Eventify
-from ECKG.src.helper_functions import fix_ner, deduplicate_named_entities, get_relations_from_sentences, \
+from eventify import Eventify
+from helper_functions import fix_ner, deduplicate_named_entities, get_relations_from_sentences, \
     create_graph_from_pairs, graph_entity_importance_evaluation, get_entities_from_svo_triplets, find_similar, \
     get_relations_from_sentences_sentiment, get_relations_from_sentences_sentiment_verb, group_relations_filter, \
     create_graph_from_pairs_sentiment, group_relations, \
     get_triads, evaluate_triads, get_entities_from_svo_triplets_sentiment, EnglishCorefPipeline, \
     get_relations_from_sentences_coref_sentence_sent, is_similar_string, find_similar
 from books.get_data import get_data, Book
-from ECKG.src.character import Character
+from character import Character
 from sentiment.sentiment_analysis import *
 
 from sklearn.model_selection import train_test_split

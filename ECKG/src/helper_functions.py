@@ -20,12 +20,12 @@ from simstring.feature_extractor.character_ngram import CharacterNgramFeatureExt
 from simstring.measure.cosine import CosineMeasure
 from simstring.searcher import Searcher
 
-from ECKG.src.SloCOREF.contextual_model_bert import ContextualControllerBERT
-from ECKG.src.SloCOREF.data import Token, Mention
-from ECKG.src.eventify import Eventify
+from SloCOREF.contextual_model_bert import ContextualControllerBERT
+from SloCOREF.data import Token, Mention
+from eventify import Eventify
 from books.get_data import get_data, Book
 from sentiment.sentiment_analysis import SentimentAnalysis
-from ECKG.src.SloCOREF.data import Document as Doc
+from SloCOREF.data import Document as Doc
 import coreferee
 
 OBJECT_DEPS = {"dobj", "dative", "attr", "oprd"}

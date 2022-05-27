@@ -8,7 +8,8 @@ For access to the books please contact me at: [Erik Kastelec](mailto:erikkastele
 * install requirements
 
 ```
-pip install -r ./ECKG/src/requirements.txt
+pip install -r ./ECKG/requirements.txt
+pip install git+https://github.com/hltcoe/PredPatt.git
 python -m spacy download en_core_web_trf
 ```
 

@@ -1,5 +1,5 @@
-from ECKG.src.SloCOREF.baseline import BaselineController, MentionPairFeatures
-from ECKG.src.SloCOREF.data import read_classla, read_corpus
+from SloCOREF.baseline import BaselineController, MentionPairFeatures
+from SloCOREF.data import read_classla, read_corpus
 from eventify import *
 from helper_functions import *
 
