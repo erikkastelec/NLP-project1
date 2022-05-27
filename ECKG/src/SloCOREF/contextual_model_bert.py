@@ -12,9 +12,9 @@ import torch.optim as optim
 from sklearn.model_selection import KFold
 from transformers import BertModel, BertTokenizer
 
-from ECKG.src.SloCOREF.common import ControllerBase, NeuralCoreferencePairScorer
-from ECKG.src.SloCOREF.data import read_corpus, Document
-from ECKG.src.SloCOREF.utils import split_into_sets, fixed_split, KFoldStateCache
+from common import ControllerBase, NeuralCoreferencePairScorer
+from data import read_corpus, Document
+from utils import split_into_sets, fixed_split, KFoldStateCache
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--model_name", type=str, default=None)
