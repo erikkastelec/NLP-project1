@@ -16,7 +16,7 @@ from pyjarowinkler import distance as jwdistance
 from utils import split_into_sets, fixed_split
 from common import ControllerBase
 
-from ECKG.src.SloCOREF.data import read_corpus
+from data import read_corpus
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--model_name", type=str, default="baseline_senticoref_coref149")
