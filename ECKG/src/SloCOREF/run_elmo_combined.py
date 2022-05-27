@@ -6,7 +6,7 @@ import torch
 from sklearn.model_selection import KFold
 
 from contextual_model_elmo import ContextualControllerELMo, parser
-from ECKG.src.SloCOREF.data import read_corpus
+from data import read_corpus
 from utils import fixed_split, split_into_sets, KFoldStateCache
 
 DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
