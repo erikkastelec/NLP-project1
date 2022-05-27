@@ -3,7 +3,7 @@ import webbrowser
 import os
 import ast
 from bs4 import BeautifulSoup
-from ECKG.src.SloCOREF.data import COREF149_DIR, SENTICOREF_DIR, read_senticoref_doc
+from data import COREF149_DIR, SENTICOREF_DIR, read_senticoref_doc
 
 VISUAL_FILE_NAME = 'visualization.html'
 current_directory = os.getcwd()
