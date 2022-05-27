@@ -33,6 +33,6 @@ python ./ECKG/src/eval_corpus.py
 
 #### Corpus
 
-[Corpus.tsv](./books/corpus.tsv)
+[Corpus.tsv](./ECKG/src/books/corpus.tsv)
 
 
