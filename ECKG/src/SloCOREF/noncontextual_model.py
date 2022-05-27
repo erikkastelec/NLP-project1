@@ -13,7 +13,7 @@ import torch.optim as optim
 from sklearn.model_selection import KFold
 
 from common import ControllerBase, NeuralCoreferencePairScorer
-from ECKG.src.SloCOREF.data import read_corpus, Document
+from data import read_corpus, Document
 from utils import extract_vocab, split_into_sets, fixed_split
 
 parser = argparse.ArgumentParser()
